@@ -153,8 +153,8 @@ PageCode Page::Insert(string_view key, const vector<string_view> &vals,
   auto next_record_meta = this->get_arribute<RecordMeta>(record_meta->next);
   // 内部节点的插入, 则需要考虑插入值额外逻辑
   if (meta_->page_type == PageType::kInternalPage) {
-    cout << record_meta->next << endl;
-    cout << *next_record_meta << endl;
+    // cout << record_meta->next << endl;
+    // cout << *next_record_meta << endl;
     // cout << stoi(vals[1]) << endl;
     this->Fill(record_meta->next + sizeof(RecordMeta) +
                    next_record_meta->key_len,
@@ -192,7 +192,7 @@ bool Page::Erase(string_view key, const Compare &compare) {
   // 未命中
   if (compare(key, data) != 0) {
     cout << *cur << endl;
-    cout << "key=" << key << " 未命中!" << endl;
+    cout << "key=" << key << " hit miss" << endl;
     return false;
   }
 
@@ -311,6 +311,17 @@ pair<string, Page> Page::SplitPage() {
 
   delete[] page_slots;
   return {mid_key.data(), page};
+}
+
+/**
+ * @brief 合并页
+ *
+ * @param page 需要合并的兄弟页
+ * @param is_next 是否是后继页
+ * @return PageCode
+ */
+PageCode Page::MergePage(Page sbling_page, bool is_next) {
+  return PageCode::PAGE_OK;
 }
 
 bool Page::full() const { return true; }
@@ -490,6 +501,7 @@ uint16_t Page::EraseSlot(int slot_no) noexcept {
   memmove(dst, src, move_size);
   meta_->slots--;
   meta_->free_size = meta_->free_size + sizeof(uint16_t);
+  return 0;
 }
 
 /**
@@ -865,11 +877,12 @@ uint16_t Page::InsertRecord(uint16_t prev_record_address,
 
 uint16_t Page::Fill(uint16_t offset, string_view data) {
   memcpy(base_address_ + offset, data.data(), data.length());
+  return 0;
 }
 
-uint16_t Page::Fill(uint16_t offset, uint16_t len, IReader *reader) {
-  reader->read(offset, base_address_, len);
-}
+// uint16_t Page::Fill(uint16_t offset, uint16_t len, IReader *reader) {
+//   reader->read(offset, base_address_, len);
+// }
 
 string_view Page::View(uint16_t offset, size_t len) {
   return {base_address_ + offset, len};

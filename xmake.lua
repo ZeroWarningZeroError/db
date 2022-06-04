@@ -1,15 +1,12 @@
 add_rules("mode.debug", "mode.release")
 
 set_languages("c++20")
--- add_cxxflags('-std=c++2a')
 add_requires("fmt")
-add_requires("opengl")
 add_requires("gtest 1.11.0")
 
 target("0327")
     add_files("main.cpp")
     set_kind("binary")
-    -- add_files("main2.cpp")
     add_files("src/*.cpp")
     add_files("src/bplustree/*.cpp")
     add_packages("fmt")
@@ -21,3 +18,4 @@ target("page_test")
     add_files("src/bplustree/*.cpp")
     add_packages("fmt", "gtest")
     add_includedirs("include")
+

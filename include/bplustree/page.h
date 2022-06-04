@@ -11,12 +11,10 @@
 #include <utility>
 #include <vector>
 
-
 #include "base.h"
 #include "basetype.h"
 #include "bplustree/record.h"
 
-#include "io.h"
 #include "memory/buffer.h"
 
 using std::optional;
@@ -228,14 +226,14 @@ public:
    */
   uint16_t Fill(uint16_t offset, string_view data);
 
-  /**
-   * @brief 填充数据
-   *
-   * @param offset 偏移量
-   * @param reader 数据来源
-   * @return uint16_t
-   */
-  uint16_t Fill(uint16_t offset, uint16_t len, IReader *reader);
+  // /**
+  //  * @brief 填充数据
+  //  *
+  //  * @param offset 偏移量
+  //  * @param reader 数据来源
+  //  * @return uint16_t
+  //  */
+  // uint16_t Fill(uint16_t offset, uint16_t len, IReader *reader);
 
   /**
    * @brief 生成数据视图

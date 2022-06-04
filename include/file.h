@@ -17,7 +17,7 @@ public:
   File() = default;
   File(const std::string &db_file);
   File(const File &other) = delete;
-  File(const File &&other) = default;
+  // File(const File &&other) = default;
   ~File();
 
 public:

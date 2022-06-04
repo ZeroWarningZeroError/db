@@ -162,3 +162,4 @@ void BPlusTreeIndex::EraseLeafNode(address_t page_address, string_view key,
       }
     }
   }
+}

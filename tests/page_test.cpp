@@ -93,7 +93,6 @@ TEST_F(PageTest, testInsertAndErase) {
 
   ASSERT_EQ(node_size_, page_->meta()->node_size);
 
-  // 再次插入删除, 主要测试page内部空闲链表的回收
   for (int i = 1000;
        PageCode::PAGE_OK ==
        page_->Insert("key" + to_string(i), {"val" + to_string(i)}, cmp);
