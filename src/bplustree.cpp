@@ -51,8 +51,8 @@ BPlusTreeIndex::~BPlusTreeIndex() {
  */
 bool BPlusTreeIndex::Insert(string_view key, string_view val) {
   address_t leaf_node_address = this->LocateLeafNode(key);
-  // insert_leaf_node(leaf_node_address, key, val, comparator_);
-  return true;
+  this->InsertIntoLeafNode(key, val);
+  return true
 }
 
 /**
