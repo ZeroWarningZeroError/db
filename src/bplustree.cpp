@@ -15,7 +15,9 @@ ostream &operator<<(ostream &os, const BPlusTreeIndexMeta &meta) {
   return os;
 }
 
-BPlusTreeIndex::BPlusTreeIndex(const string &index_file_path) {
+BPlusTreeIndex::BPlusTreeIndex(const string &index_file_path,
+                               const Compare &compare)
+    : comparator_(compare) {
   // 打开索引文件
   bool is_init = File::exist(index_file_path);
   file_ = new File(index_file_path);
@@ -40,20 +42,53 @@ BPlusTreeIndex::~BPlusTreeIndex() {
 }
 
 /**
+ * @brief 插入值
+ *
+ * @param key 键
+ * @param val 值
+ * @return true
+ * @return false
+ */
+bool BPlusTreeIndex::Insert(string_view key, string_view val) {
+  address_t leaf_node_address = this->LocateLeafNode(key);
+  // insert_leaf_node(leaf_node_address, key, val, comparator_);
+  return true;
+}
+
+/**
+ * @brief 删除值
+ *
+ * @param key 键
+ * @return optional<address_t>
+ */
+optional<address_t> BPlusTreeIndex::Erase(string_view key) {
+  return std::nullopt;
+}
+
+/**
+ * @brief 搜索值
+ *
+ * @param key 键
+ * @return optional<address_t>
+ */
+optional<address_t> BPlusTreeIndex::Search(string_view key) {
+  return std::nullopt;
+}
+
+/**
  * @brief 根据键值定位叶子节点的地址
  *
  * @param key 键
- * @param compare 比较器
+ * @param comparator_ 比较器
  * @return address_t 叶子节点地址
  */
-address_t BPlusTreeIndex::locate_leaf_node(string_view key,
-                                           const Compare &compare) {
+address_t BPlusTreeIndex::LocateLeafNode(string_view key) {
   Page page(PageType::kLeafPage);
   file_->read(index_meta_->root, page.base_address(), PAGE_SIZE);
 
   address_t target_node_address = index_meta_->root;
   while (page.meta()->page_type == PageType::kInternalPage) {
-    uint16_t offset = page.LowerBound(key, compare);
+    uint16_t offset = page.LowerBound(key, comparator_);
     auto meta = page.get_arribute<RecordMeta>(offset);
     target_node_address = *(page.get_arribute<address_t>(
         offset + sizeof(RecordMeta) + meta->key_len));
@@ -63,22 +98,21 @@ address_t BPlusTreeIndex::locate_leaf_node(string_view key,
   return target_node_address;
 }
 
-bool BPlusTreeIndex::insert(string_view key, string_view val,
-                            const Compare &compare) {
-  address_t leaf_node_address = this->locate_leaf_node(key, compare);
-
-  // insert_leaf_node(leaf_node_address, key, val, compare);
-  return true;
-}
-
-optional<address_t> BPlusTreeIndex::InsertLeafNode(address_t page_address,
-                                                   string_view key,
-                                                   string_view val,
-                                                   const Compare &compare) {
+/**
+ * @brief 向叶子节点中插入新值
+ *
+ * @param page_address 地址
+ * @param key 键
+ * @param val 值
+ * @return optional<address_t>
+ */
+optional<address_t> BPlusTreeIndex::InsertIntoLeafNode(address_t page_address,
+                                                       string_view key,
+                                                       string_view val) {
   Page page(PageType::kLeafPage);
   file_->read(page_address, page.base_address(), PAGE_SIZE);
 
-  PageCode code = page.Insert(key, {val}, compare);
+  PageCode code = page.Insert(key, {val}, comparator_);
 
   if (PageCode::PAGE_OK == code) {
     return std::nullopt;
@@ -86,18 +120,25 @@ optional<address_t> BPlusTreeIndex::InsertLeafNode(address_t page_address,
 
   if (PageCode::PAGE_FULL == code) {
     auto [mid_key, other_page] = page.SplitPage();
-    return this->InsertInternalNode(page.meta()->parent, key, page.meta()->self,
-                                    other_page.meta()->self, compare);
+    return this->InsertIntoInternalNode(
+        page.meta()->parent, key, page.meta()->self, other_page.meta()->self);
   }
 
   return std::nullopt;
 }
 
-optional<address_t> BPlusTreeIndex::InsertInternalNode(address_t page_address,
-                                                       string_view key,
-                                                       address_t left_child,
-                                                       address_t right_child,
-                                                       const Compare &compare) {
+/**
+ * @brief 向内部节点中插入新值
+ *
+ * @param page_address 地址
+ * @param key 键
+ * @param left_child 左孩子节点地址
+ * @param right_child 有孩子节点地址
+ * @return optional<address_t>
+ */
+optional<address_t> BPlusTreeIndex::InsertIntoInternalNode(
+    address_t page_address, string_view key, address_t left_child,
+    address_t right_child) {
   Page page = Page(PageType::kInternalPage);
   if (page_address != 0) {
     file_->read(page_address, page.base_address(), PAGE_SIZE);
@@ -109,7 +150,7 @@ optional<address_t> BPlusTreeIndex::InsertInternalNode(address_t page_address,
   PageCode code = page.Insert(key,
                               {Serializer<address_t>::serialize(left_child),
                                Serializer<address_t>::serialize(right_child)},
-                              compare);
+                              comparator_);
 
   if (PageCode::PAGE_OK == code) {
     return std::nullopt;
@@ -117,26 +158,28 @@ optional<address_t> BPlusTreeIndex::InsertInternalNode(address_t page_address,
 
   if (PageCode::PAGE_FULL == code) {
     auto [mid_key, other_page] = page.SplitPage();
-    return this->InsertInternalNode(page.meta()->parent, key, page.meta()->self,
-                                    other_page.meta()->self, compare);
+    return this->InsertIntoInternalNode(
+        page.meta()->parent, key, page.meta()->self, other_page.meta()->self);
   }
 
   file_->write(page.meta()->self, page.base_address(), PAGE_SIZE);
 }
 
-optional<address_t> BPlusTreeIndex::erase(string_view key) {
-  return std::nullopt;
-}
-
-void BPlusTreeIndex::EraseLeafNode(address_t page_address, string_view key,
-                                   const Compare &compare) {
+/**
+ * @brief 从叶子节点删除值
+ *
+ * @param page_address 地址
+ * @param key 键
+ */
+void BPlusTreeIndex::EraseFromLeafNode(address_t page_address,
+                                       string_view key) {
   if (page_address == 0) {
     return;
   }
   Page page = Page(PageType::kInternalPage);
   file_->read(page_address, page.base_address(), PAGE_SIZE);
 
-  page.Erase(key, compare);
+  page.Erase(key, comparator_);
 
   auto meta = page.meta();
 
@@ -147,7 +190,7 @@ void BPlusTreeIndex::EraseLeafNode(address_t page_address, string_view key,
       if (meta->free_size >
           sbling_page.meta()->size - sbling_page.meta()->free_size) {
         page.MergePage(sbling_page, true);
-        this->EraseLeafNode(meta->parent, key, compare);
+        this->EraseFromLeafNode(meta->parent, key);
         return;
       }
     }
@@ -157,9 +200,20 @@ void BPlusTreeIndex::EraseLeafNode(address_t page_address, string_view key,
       if (meta->free_size >
           sbling_page.meta()->size - sbling_page.meta()->free_size) {
         page.MergePage(sbling_page, true);
-        this->EraseLeafNode(meta->parent, key, compare);
+        this->EraseFromLeafNode(meta->parent, key);
         return;
       }
     }
   }
+}
+
+/**
+ * @brief 从内部节点中删除值
+ *
+ * @param page_address
+ * @param key
+ */
+void BPlusTreeIndex::EraseFromInteralNode(address_t page_address,
+                                          string_view key) {
+  return;
 }
