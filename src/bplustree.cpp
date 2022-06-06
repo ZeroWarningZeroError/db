@@ -27,6 +27,8 @@ BPlusTreeIndex::BPlusTreeIndex(const string &index_file_path,
   index_meta_ = new BPlusTreeIndexMeta{0, 0, 0, 0};
   if (!is_init) {
     file_->write(0, index_meta_, sizeof(BPlusTreeIndexMeta));
+    index_meta_->root = this->AllocEmptyPage(PageType::kLeafPage);
+    index_meta_->leaf = index_meta_->root;
   } else {
     file_->read(0, index_meta_, sizeof(BPlusTreeIndexMeta));
   }
@@ -35,6 +37,7 @@ BPlusTreeIndex::BPlusTreeIndex(const string &index_file_path,
 
 BPlusTreeIndex::~BPlusTreeIndex() {
   if (index_meta_ != nullptr) {
+    cout << (*index_meta_) << endl;
     file_->write(0, index_meta_, sizeof(BPlusTreeIndexMeta));
     delete index_meta_;
     delete file_;
@@ -51,8 +54,8 @@ BPlusTreeIndex::~BPlusTreeIndex() {
  */
 bool BPlusTreeIndex::Insert(string_view key, string_view val) {
   address_t leaf_node_address = this->LocateLeafNode(key);
-  this->InsertIntoLeafNode(key, val);
-  return true
+  this->InsertIntoLeafNode(leaf_node_address, key, val);
+  return true;
 }
 
 /**
@@ -115,6 +118,8 @@ optional<address_t> BPlusTreeIndex::InsertIntoLeafNode(address_t page_address,
   PageCode code = page.Insert(key, {val}, comparator_);
 
   if (PageCode::PAGE_OK == code) {
+    page.scan_use();
+    file_->write(page_address, page.base_address(), PAGE_SIZE);
     return std::nullopt;
   }
 
@@ -217,3 +222,17 @@ void BPlusTreeIndex::EraseFromInteralNode(address_t page_address,
                                           string_view key) {
   return;
 }
+
+/**
+ * @brief 开辟空闲页
+ *
+ * @param page_type
+ * @return address_t
+ */
+address_t BPlusTreeIndex::AllocEmptyPage(PageType page_type) {
+  address_t page_address = file_->alloc(PAGE_SIZE);
+  Page page(page_type);
+  page.meta()->self = page_address;
+  file_->write(page_address, page.base_address(), PAGE_SIZE);
+  return page_address;
+};

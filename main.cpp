@@ -1,6 +1,8 @@
 #include <ctime>
 #include <iostream>
+#include <string>
 #include <string_view>
+#include <type_traits>
 
 #include "bplustree.h"
 #include "bplustree/page.h"
@@ -8,8 +10,6 @@
 #include "fmt/format.h"
 #include "memory/buffer.h"
 #include "serialize.h"
-#include <string>
-#include <type_traits>
 
 using std::cout;
 using std::endl;
@@ -30,11 +30,6 @@ string_view GetKey(Page *page, uint16_t record_address) {
 }
 
 int main() {
-
-  // string data = Serializer<uint16_t>::serialize(10299);
-  // cout << data.size() << endl;
-  // cout << Serializer<uint16_t>::deserialize(data) << endl;
-
   auto cmp = [](string_view v1, string_view v2) -> int {
     if (v1 == v2) {
       return 0;
@@ -42,37 +37,11 @@ int main() {
     return v1 < v2 ? 1 : -1;
   };
 
-  // Page* page = new Page(kInternalPage);
+  BPlusTreeIndex index("t1.index", cmp);
 
-  // page->Insert("5", { Serializer<address_t>::serialize(97),
-  // Serializer<address_t>::serialize(120)}, cmp); page->Insert("4", {
-  // Serializer<address_t>::serialize(97),
-  // Serializer<address_t>::serialize(98)}, cmp); page->Insert("6", {
-  // Serializer<address_t>::serialize(120),
-  // Serializer<address_t>::serialize(121)}, cmp);
-
-  // auto [mid_key, other_page] = page->SplitPage();
-
-  Page *page = new Page(kLeafPage);
-
-  page->Insert("5", {Serializer<address_t>::serialize(97)}, cmp);
-  page->Insert("4", {Serializer<address_t>::serialize(97)}, cmp);
-  page->Insert("6", {Serializer<address_t>::serialize(120)}, cmp);
-
-  for (int i = 0; i < 20; i++) {
-    page->Insert("key" + to_string(i), {"val" + to_string(i)}, cmp);
+  for (int i = 0; i < 10; i++) {
+    index.Insert("key" + to_string(i), "val" + to_string(i));
   }
-
-  auto [mid_key, other_page] = page->SplitPage();
-
-  page->scan_use();
-  page->scan_slots();
-  other_page.scan_use();
-  other_page.scan_slots();
-
-  // page_->scan_slots();
-  // GetKey(page_, page_->FloorSearch("key_test", cmp));
-  // cout << page_->LocateSlot("key_test" + to_string(48), cmp) << endl;
 
   return 0;
 }

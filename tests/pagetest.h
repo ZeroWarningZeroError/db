@@ -1,5 +1,7 @@
-#include <functional>
+#pragma once
 #include <gtest/gtest.h>
+
+#include <functional>
 #include <iostream>
 #include <string>
 
@@ -12,7 +14,7 @@ using std::string;
 using std::to_string;
 
 class PageTest : public ::testing::Test {
-protected:
+ protected:
   void SetUp() override {
     page_ = new Page(PageType::kLeafPage);
     for (int i = 0; i < 100; i++) {
@@ -81,7 +83,6 @@ TEST_F(PageTest, testFloorSearch) {
 }
 
 TEST_F(PageTest, testInsertAndErase) {
-
   for (int i = 1000;
        PageCode::PAGE_OK ==
        page_->Insert("key" + to_string(i), {"val" + to_string(i)}, cmp);
@@ -104,9 +105,4 @@ TEST_F(PageTest, testInsertAndErase) {
 
   ASSERT_EQ(first_insert_node_size, second_insert_node_size);
   ASSERT_EQ(node_size_, page_->meta()->node_size);
-}
-
-int main() {
-  testing::InitGoogleTest();
-  return RUN_ALL_TESTS();
 }

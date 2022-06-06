@@ -7,7 +7,9 @@
 #include <string_view>
 
 #include "basetype.h"
+#include "bplustree/page.h"
 #include "file.h"
+
 
 using std::optional;
 using std::ostream;
@@ -105,6 +107,8 @@ class BPlusTreeIndex {
    * @param key
    */
   void EraseFromInteralNode(address_t page_address, string_view key);
+
+  address_t AllocEmptyPage(PageType page_type);
 
  private:
   File *file_;

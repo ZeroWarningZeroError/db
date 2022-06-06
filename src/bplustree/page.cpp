@@ -23,10 +23,12 @@ using std::to_string;
 
 ostream &operator<<(ostream &os, const PageMeta &meta) {
   return os << fmt::format(
-             "[type=Page, fields=[prev={}, next={}, heap_top={}[{}], free={}, "
-             "use={}, slots={}, node_size={}, free_size={}]",
+             "[type=Page, fields=[prev={}, next={}, heap_top={}[{}], "
+             "free={},use={}, slots={}, node_size={}, free_size={}]",
              meta.prev, meta.next, meta.heap_top, sizeof(PageMeta), meta.free,
              meta.use, meta.slots, meta.node_size, meta.free_size);
+  // return os << "[type=Page, fields=["  << meta.prev
+  return os;
 }
 
 #pragma endregion
@@ -114,6 +116,8 @@ PageCode Page::Insert(string_view key, const vector<string_view> &vals,
   uint16_t prev_record_address = this->FloorSearch(key, compare);
   auto prev_record_meta = this->get_arribute<RecordMeta>(prev_record_address);
 
+  cout << prev_record_address << endl;
+
   // 判断插入key是否存在
   uint16_t record_address = prev_record_meta->next;
   auto record_meta = this->get_arribute<RecordMeta>(prev_record_meta->next);
@@ -127,6 +131,7 @@ PageCode Page::Insert(string_view key, const vector<string_view> &vals,
                       ? prev_record_meta->slot_no
                       : (prev_record_meta->slot_no + 1);
     record_address = this->alloc(record_occupy_size);
+    cout << record_address << endl;
     if (record_address == 0) {
       return PageCode::PAGE_FULL;
     }
@@ -156,9 +161,9 @@ PageCode Page::Insert(string_view key, const vector<string_view> &vals,
     // cout << record_meta->next << endl;
     // cout << *next_record_meta << endl;
     // cout << stoi(vals[1]) << endl;
-    this->Fill(record_meta->next + sizeof(RecordMeta) +
-                   next_record_meta->key_len,
-               vals[1]);
+    this->Fill(
+        record_meta->next + sizeof(RecordMeta) + next_record_meta->key_len,
+        vals[1]);
   }
   return PageCode::PAGE_OK;
 }
@@ -261,7 +266,6 @@ optional<string_view> Page::Search(string_view key, const Compare &compare) {
  * @return pair<string_view, SharedBuffer<Page>>
  */
 pair<string, Page> Page::SplitPage() {
-
   uint16_t half = (meta_->node_size) / 2;
   uint16_t prev_record_address = this->LocateRecord(half - 1);
   auto prev_record_meta = this->get_arribute<RecordMeta>(prev_record_address);
@@ -271,9 +275,9 @@ pair<string, Page> Page::SplitPage() {
   auto mid_key = this->View(prev_record_meta->next + sizeof(RecordMeta),
                             mid_record_meta->key_len);
 
-  auto mid_val = this->View(prev_record_meta->next + sizeof(RecordMeta) +
-                                mid_record_meta->key_len,
-                            mid_record_meta->val_len);
+  auto mid_val = this->View(
+      prev_record_meta->next + sizeof(RecordMeta) + mid_record_meta->key_len,
+      mid_record_meta->val_len);
 
   uint16_t new_page_begin_record_address = prev_record_meta->next;
 
@@ -899,9 +903,9 @@ void Page::scan_use() noexcept {
   while (use) {
     string_view key = {base_address_ + sizeof(RecordMeta) + offset,
                        static_cast<size_t>(use->key_len)};
-    string_view val = {base_address_ + sizeof(RecordMeta) + offset +
-                           use->key_len,
-                       static_cast<size_t>(use->val_len)};
+    string_view val = {
+        base_address_ + sizeof(RecordMeta) + offset + use->key_len,
+        static_cast<size_t>(use->val_len)};
     cout << " " << (*use) << fmt::format("[key={}, val={}]", key, val) << endl;
     offset = use->next;
     use = get_arribute<RecordMeta>(use->next);
@@ -917,9 +921,9 @@ void Page::scan_free() noexcept {
   while (free) {
     string_view key = {base_address_ + sizeof(RecordMeta) + offset,
                        static_cast<size_t>(free->key_len)};
-    string_view val = {base_address_ + sizeof(RecordMeta) + offset +
-                           free->key_len,
-                       static_cast<size_t>(free->val_len)};
+    string_view val = {
+        base_address_ + sizeof(RecordMeta) + offset + free->key_len,
+        static_cast<size_t>(free->val_len)};
     cout << " " << *free << fmt::format("[key={}, val={}]", key, val) << endl;
     offset = free->next;
     free = get_arribute<RecordMeta>(free->next);

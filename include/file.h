@@ -13,14 +13,14 @@ using std::mutex;
 using std::string;
 
 class File {
-public:
+ public:
   File() = default;
   File(const std::string &db_file);
   File(const File &other) = delete;
   // File(const File &&other) = default;
   ~File();
 
-public:
+ public:
   /**
    * @brief 文件是否存在
    *
@@ -30,7 +30,7 @@ public:
    */
   static bool exist(const std::string &file_path);
 
-public:
+ public:
   /**
    * @brief 打开文件
    *
@@ -64,7 +64,8 @@ public:
    * @param obj 对象
    * @param size 读取大小
    */
-  template <typename T> void read(int pos, T *obj, size_t size);
+  template <typename T>
+  void read(int pos, T *obj, size_t size);
 
   /**
    * @brief 从文件中读取指定对象
@@ -73,7 +74,8 @@ public:
    * @param pos
    * @return T
    */
-  template <typename T> T read(int pos);
+  template <typename T>
+  T read(int pos);
 
   /**
    * @brief
@@ -100,7 +102,8 @@ public:
    * @param pos 写入位置
    * @param obj 写入对象
    */
-  template <typename T> void write(int pos, T *obj, size_t size);
+  template <typename T>
+  void write(int pos, const T *obj, size_t size);
 
   /**
    * @brief 向文件尾部添加数据
@@ -110,30 +113,33 @@ public:
    */
   void append(const char *data, int len);
 
-private:
+ private:
   size_t last_pos();
 
-private:
+ private:
   fstream handle_;
   string db_file_name_;
   mutex _file_lock;
   const size_t MARK = 1;
 };
 
-template <typename T> void File::read(int pos, T *obj, size_t size) {
+template <typename T>
+void File::read(int pos, T *obj, size_t size) {
   lock_guard guard(_file_lock);
   handle_.seekg(pos);
   handle_.read(reinterpret_cast<char *>(obj), size);
 }
 
-template <typename T> T File::read(int pos) {
+template <typename T>
+T File::read(int pos) {
   lock_guard guard(_file_lock);
   T obj;
   read(pos, &obj, sizeof(T));
   return obj;
 }
 
-template <typename T> void File::write(int pos, T *obj, size_t size) {
+template <typename T>
+void File::write(int pos, const T *obj, size_t size) {
   if (size <= 0) {
     size = sizeof(T);
   }
