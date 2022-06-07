@@ -23,10 +23,12 @@ using std::to_string;
 
 ostream &operator<<(ostream &os, const PageMeta &meta) {
   return os << fmt::format(
-             "[type=Page, fields=[prev={}, next={}, heap_top={}[{}], "
+             "[type=Page, fields=[self={},parent={},prev={}, next={}, "
+             "heap_top={}[{}], "
              "free={},use={}, slots={}, node_size={}, free_size={}]",
-             meta.prev, meta.next, meta.heap_top, sizeof(PageMeta), meta.free,
-             meta.use, meta.slots, meta.node_size, meta.free_size);
+             meta.self, meta.parent, meta.prev, meta.next, meta.heap_top,
+             sizeof(PageMeta), meta.free, meta.use, meta.slots, meta.node_size,
+             meta.free_size);
   // return os << "[type=Page, fields=["  << meta.prev
   return os;
 }
@@ -308,12 +310,14 @@ pair<string, Page> Page::SplitPage() {
   memcpy(page_slots, base_address_ + this->slot_offset(0), slot_size);
   meta_->slots = rest_slots;
   meta_->node_size = half;
-  meta_->free_size += page.meta()->size - meta_->free_size;
+  // meta_->free_size += page.meta()->size - meta_->free_size;
   memcpy(base_address_ + this->slot_offset(0), page_slots, slot_size);
 
   if (meta_->page_type == kInternalPage) {
     this->Fill(this->slot(meta_->slots - 1) + sizeof(RecordMeta) + 3, mid_val);
   }
+  // Page page = this->CopyRecordToNewPage(, new_page_begin_record_address);
+  this->TidyPage();
 
   delete[] page_slots;
   return {{mid_key.data(), mid_key.size()}, page};
@@ -665,6 +669,7 @@ void Page::TidyPage() {
          sizeof(uint16_t) * (meta_->slots - 2));
 
   meta_->heap_top += offset;
+  meta_->free_size = this->slot_offset(0) - meta_->heap_top;
   delete[] buffer;
   delete[] slots;
 }
@@ -724,6 +729,7 @@ Page Page::CopyRecordToNewPage(uint16_t begin_record_address,
   page.meta_->slots = new_page_slot_no;
   memcpy(page.base_address_ + page.slot_offset(0), page_slots,
          sizeof(uint16_t) * page.meta_->slots);
+  page.meta_->free_size = page.slot_offset(0) - page.meta_->heap_top;
   return page;
 }
 

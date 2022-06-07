@@ -129,6 +129,18 @@ ResultCode BPlusTreeIndex::Insert(PageType page_type, address_t page_address,
     page.scan_use();
     auto [mid_key, other_page] = page.SplitPage();
 
+    cout << "Insert:mid_key=" << mid_key << ",key=" << key << endl;
+
+    if (key < mid_key) {
+      if (PageCode::PAGE_OK != page.Insert(key, vals, comparator_)) {
+        return ResultCode::FAIL;
+      }
+    } else {
+      if (PageCode::PAGE_OK != other_page.Insert(key, vals, comparator_)) {
+        return ResultCode::FAIL;
+      }
+    }
+
     other_page.meta()->self =
         BPLUSTREE_INDEX_PAGE_ADDRESS(index_meta_->max_page_id++);
     page.meta()->next = other_page.meta()->self;
@@ -144,6 +156,8 @@ ResultCode BPlusTreeIndex::Insert(PageType page_type, address_t page_address,
           BPLUSTREE_INDEX_PAGE_ADDRESS(index_meta_->max_page_id);
       page.meta()->parent = alloc_parent_address;
       other_page.meta()->parent = alloc_parent_address;
+    } else {
+      other_page.meta()->parent = parent_address;
     }
 
     file_->write(page.meta()->self, page.base_address(), PAGE_SIZE);
@@ -152,13 +166,14 @@ ResultCode BPlusTreeIndex::Insert(PageType page_type, address_t page_address,
     page.scan_use();
     other_page.scan_use();
 
-    this->Insert(PageType::kInternalPage, parent_address, mid_key,
-                 {left_child_address, right_child_address});
+    return this->Insert(PageType::kInternalPage, parent_address, mid_key,
+                        {left_child_address, right_child_address});
 
-    return ResultCode::NODE_FULL;
+    // return ResultCode::NODE_FULL;
   }
 
   file_->write(page.meta()->self, page.base_address(), PAGE_SIZE);
+  return ResultCode::SUCCESS;
 }
 
 /**
