@@ -39,9 +39,21 @@ int main() {
 
   BPlusTreeIndex index("t1.index", cmp);
 
-  for (int i = 0; i < 10; i++) {
-    index.Insert("key" + to_string(i), "val" + to_string(i));
+  for (int i = 1000; i < 1008; i++) {
+    auto code = index.Insert("key" + to_string(i), "val" + to_string(i));
+    if (ResultCode::NODE_FULL == code) {
+      index.Insert("key" + to_string(i), "val" + to_string(i));
+    }
   }
 
+  index.BFS();
+
+  // Page page(kLeafPage);
+
+  // for (int i = 0; i < 100; i++) {
+  //   page.Insert("key" + to_string(i), {"val" + to_string(i)}, cmp);
+  // }
+
+  // cout << *page.meta() << endl;
   return 0;
 }

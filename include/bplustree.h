@@ -10,17 +10,19 @@
 #include "bplustree/page.h"
 #include "file.h"
 
-
 using std::optional;
 using std::ostream;
 using std::string_view;
 
 class File;
 
+enum class ResultCode { OK, DUPLICATE, FAIL, NOT_EXIST, SUCCESS, NODE_FULL };
+
 struct BPlusTreeIndexMeta {
-  uint32_t root;
-  uint32_t leaf;
-  uint32_t free;
+  address_t root;
+  address_t leaf;
+  address_t free;
+  page_id_t max_page_id;
   uint32_t crc;
 };
 
@@ -40,7 +42,7 @@ class BPlusTreeIndex {
    * @return true
    * @return false
    */
-  bool Insert(string_view key, string_view val);
+  ResultCode Insert(string_view key, string_view val);
 
   /**
    * @brief 删除值
@@ -48,7 +50,7 @@ class BPlusTreeIndex {
    * @param key 键
    * @return optional<address_t>
    */
-  optional<address_t> Erase(string_view key);
+  ResultCode Erase(string_view key);
 
   /**
    * @brief 搜索值
@@ -67,30 +69,10 @@ class BPlusTreeIndex {
    */
   address_t LocateLeafNode(string_view key);
 
-  /**
-   * @brief 向叶子节点中插入新值
-   *
-   * @param page_address 地址
-   * @param key 键
-   * @param val 值
-   * @return optional<address_t>
-   */
-  optional<address_t> InsertIntoLeafNode(address_t page_address,
-                                         string_view key, string_view val);
+  ResultCode Insert(PageType page_type, address_t page_address, string_view key,
+                    const vector<string_view> &vals);
 
-  /**
-   * @brief 向内部节点中插入新值
-   *
-   * @param page_address 地址
-   * @param key 键
-   * @param left_child 左孩子节点地址
-   * @param right_child 有孩子节点地址
-   * @return optional<address_t>
-   */
-  optional<address_t> InsertIntoInternalNode(address_t page_address,
-                                             string_view key,
-                                             address_t left_child,
-                                             address_t right_child);
+  ResultCode Erase(PageType page_type, address_t page_address, string_view key);
 
   /**
    * @brief 从叶子节点删除值
@@ -98,7 +80,7 @@ class BPlusTreeIndex {
    * @param page_address 地址
    * @param key 键
    */
-  void EraseFromLeafNode(address_t page_address, string_view key);
+  ResultCode EraseFromLeafNode(address_t page_address, string_view key);
 
   /**
    * @brief 从内部节点中删除值
@@ -106,9 +88,18 @@ class BPlusTreeIndex {
    * @param page_address
    * @param key
    */
-  void EraseFromInteralNode(address_t page_address, string_view key);
+  ResultCode EraseFromInteralNode(address_t page_address, string_view key);
 
-  address_t AllocEmptyPage(PageType page_type);
+/**
+ * @brief 记录页地址
+ *
+ */
+#define BPLUSTREE_INDEX_PAGE_ADDRESS(page_id) \
+  (sizeof(BPlusTreeIndexMeta) + PAGE_SIZE * page_id)
+
+ public:
+  void ScanLeafPage();
+  void BFS();
 
  private:
   File *file_;

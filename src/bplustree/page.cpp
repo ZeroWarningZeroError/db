@@ -116,7 +116,7 @@ PageCode Page::Insert(string_view key, const vector<string_view> &vals,
   uint16_t prev_record_address = this->FloorSearch(key, compare);
   auto prev_record_meta = this->get_arribute<RecordMeta>(prev_record_address);
 
-  cout << prev_record_address << endl;
+  // cout << prev_record_address << endl;
 
   // 判断插入key是否存在
   uint16_t record_address = prev_record_meta->next;
@@ -131,7 +131,7 @@ PageCode Page::Insert(string_view key, const vector<string_view> &vals,
                       ? prev_record_meta->slot_no
                       : (prev_record_meta->slot_no + 1);
     record_address = this->alloc(record_occupy_size);
-    cout << record_address << endl;
+    // cout << record_address << endl;
     if (record_address == 0) {
       return PageCode::PAGE_FULL;
     }
@@ -299,7 +299,7 @@ pair<string, Page> Page::SplitPage() {
     owned++;
     cur_record_meta = this->get_arribute<RecordMeta>(cur_record_meta->next);
   }
-  prev_record_meta->next = end_address;
+  prev_record_meta->next = this->slot(meta_->slots - 1);
 
   this->get_arribute<RecordMeta>(this->slot(meta_->slots - 1))->owned =
       owned + 1;
@@ -307,6 +307,8 @@ pair<string, Page> Page::SplitPage() {
   uint16_t *page_slots = new uint16_t[meta_->slots];
   memcpy(page_slots, base_address_ + this->slot_offset(0), slot_size);
   meta_->slots = rest_slots;
+  meta_->node_size = half;
+  meta_->free_size += page.meta()->size - meta_->free_size;
   memcpy(base_address_ + this->slot_offset(0), page_slots, slot_size);
 
   if (meta_->page_type == kInternalPage) {
@@ -314,7 +316,7 @@ pair<string, Page> Page::SplitPage() {
   }
 
   delete[] page_slots;
-  return {mid_key.data(), page};
+  return {{mid_key.data(), mid_key.size()}, page};
 }
 
 /**
@@ -713,6 +715,7 @@ Page Page::CopyRecordToNewPage(uint16_t begin_record_address,
     }
     page.set_record(page.meta_->heap_top, record_meta, &record);
     page.meta_->heap_top = new_page_next_record_address;
+    page.meta_->node_size++;
   }
 
   auto max_record_meta = page.get_arribute<RecordMeta>(page.slot(1));
@@ -899,6 +902,7 @@ string_view Page::View(uint16_t offset, size_t len) {
 void Page::scan_use() noexcept {
   auto use = get_arribute<RecordMeta>(meta_->use);
   uint16_t offset = meta_->use;
+  cout << "meta=" << *meta_ << endl;
   cout << "use=[" << endl;
   while (use) {
     string_view key = {base_address_ + sizeof(RecordMeta) + offset,
@@ -943,5 +947,7 @@ void Page::scan_slots() noexcept {
   }
   cout << "]" << endl;
 }
+
+void Page::ScanData() noexcept { return; }
 
 #pragma endregion

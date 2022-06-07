@@ -2,12 +2,14 @@
 
 #include <cassert>
 #include <iostream>
+#include <queue>
 
 #include "bplustree/page.h"
 #include "serialize.h"
 
 using std::cout;
 using std::endl;
+using std::queue;
 
 ostream &operator<<(ostream &os, const BPlusTreeIndexMeta &meta) {
   os << fmt::format("[root={},leaf={},free={},crc={}]", meta.root, meta.leaf,
@@ -24,12 +26,8 @@ BPlusTreeIndex::BPlusTreeIndex(const string &index_file_path,
   assert(file_->is_open());
 
   // 加载索引的元数据
-  index_meta_ = new BPlusTreeIndexMeta{0, 0, 0, 0};
-  if (!is_init) {
-    file_->write(0, index_meta_, sizeof(BPlusTreeIndexMeta));
-    index_meta_->root = this->AllocEmptyPage(PageType::kLeafPage);
-    index_meta_->leaf = index_meta_->root;
-  } else {
+  index_meta_ = new BPlusTreeIndexMeta{0, 0, 0, 0, 0};
+  if (is_init) {
     file_->read(0, index_meta_, sizeof(BPlusTreeIndexMeta));
   }
   cout << (*index_meta_) << endl;
@@ -52,10 +50,9 @@ BPlusTreeIndex::~BPlusTreeIndex() {
  * @return true
  * @return false
  */
-bool BPlusTreeIndex::Insert(string_view key, string_view val) {
+ResultCode BPlusTreeIndex::Insert(string_view key, string_view val) {
   address_t leaf_node_address = this->LocateLeafNode(key);
-  this->InsertIntoLeafNode(leaf_node_address, key, val);
-  return true;
+  return this->Insert(PageType::kLeafPage, leaf_node_address, key, {val});
 }
 
 /**
@@ -64,9 +61,7 @@ bool BPlusTreeIndex::Insert(string_view key, string_view val) {
  * @param key 键
  * @return optional<address_t>
  */
-optional<address_t> BPlusTreeIndex::Erase(string_view key) {
-  return std::nullopt;
-}
+ResultCode BPlusTreeIndex::Erase(string_view key) { return ResultCode::OK; }
 
 /**
  * @brief 搜索值
@@ -86,85 +81,81 @@ optional<address_t> BPlusTreeIndex::Search(string_view key) {
  * @return address_t 叶子节点地址
  */
 address_t BPlusTreeIndex::LocateLeafNode(string_view key) {
+  if (index_meta_->root == 0) {
+    return 0;
+  }
+
   Page page(PageType::kLeafPage);
   file_->read(index_meta_->root, page.base_address(), PAGE_SIZE);
 
   address_t target_node_address = index_meta_->root;
   while (page.meta()->page_type == PageType::kInternalPage) {
+    // cout << target_node_address << endl;
     uint16_t offset = page.LowerBound(key, comparator_);
     auto meta = page.get_arribute<RecordMeta>(offset);
+    // auto key = {page.base_address() + sizeof(RecordMeta), meta->key_len};
     target_node_address = *(page.get_arribute<address_t>(
         offset + sizeof(RecordMeta) + meta->key_len));
+    // cout <<
     file_->read(target_node_address, page.base_address(), PAGE_SIZE);
   }
 
   return target_node_address;
 }
 
-/**
- * @brief 向叶子节点中插入新值
- *
- * @param page_address 地址
- * @param key 键
- * @param val 值
- * @return optional<address_t>
- */
-optional<address_t> BPlusTreeIndex::InsertIntoLeafNode(address_t page_address,
-                                                       string_view key,
-                                                       string_view val) {
-  Page page(PageType::kLeafPage);
-  file_->read(page_address, page.base_address(), PAGE_SIZE);
-
-  PageCode code = page.Insert(key, {val}, comparator_);
-
-  if (PageCode::PAGE_OK == code) {
-    page.scan_use();
-    file_->write(page_address, page.base_address(), PAGE_SIZE);
-    return std::nullopt;
-  }
-
-  if (PageCode::PAGE_FULL == code) {
-    auto [mid_key, other_page] = page.SplitPage();
-    return this->InsertIntoInternalNode(
-        page.meta()->parent, key, page.meta()->self, other_page.meta()->self);
-  }
-
-  return std::nullopt;
-}
-
-/**
- * @brief 向内部节点中插入新值
- *
- * @param page_address 地址
- * @param key 键
- * @param left_child 左孩子节点地址
- * @param right_child 有孩子节点地址
- * @return optional<address_t>
- */
-optional<address_t> BPlusTreeIndex::InsertIntoInternalNode(
-    address_t page_address, string_view key, address_t left_child,
-    address_t right_child) {
-  Page page = Page(PageType::kInternalPage);
+ResultCode BPlusTreeIndex::Insert(PageType page_type, address_t page_address,
+                                  string_view key,
+                                  const vector<string_view> &vals) {
+  Page page = Page(page_type);
   if (page_address != 0) {
     file_->read(page_address, page.base_address(), PAGE_SIZE);
   } else {
-    page.meta()->self = file_->alloc(PAGE_SIZE);
-    index_meta_->root = page.meta()->self;
+    index_meta_->root =
+        BPLUSTREE_INDEX_PAGE_ADDRESS(index_meta_->max_page_id++);
+    page.meta()->self = index_meta_->root;
+    if (page_type == kLeafPage) {
+      index_meta_->leaf = index_meta_->root;
+    }
   }
 
-  PageCode code = page.Insert(key,
-                              {Serializer<address_t>::serialize(left_child),
-                               Serializer<address_t>::serialize(right_child)},
-                              comparator_);
+  PageCode code = page.Insert(key, vals, comparator_);
 
-  if (PageCode::PAGE_OK == code) {
-    return std::nullopt;
+  if (page_type == kInternalPage) {
+    cout << "Internal" << endl;
+    page.scan_use();
   }
 
   if (PageCode::PAGE_FULL == code) {
+    page.scan_use();
     auto [mid_key, other_page] = page.SplitPage();
-    return this->InsertIntoInternalNode(
-        page.meta()->parent, key, page.meta()->self, other_page.meta()->self);
+
+    other_page.meta()->self =
+        BPLUSTREE_INDEX_PAGE_ADDRESS(index_meta_->max_page_id++);
+    page.meta()->next = other_page.meta()->self;
+
+    string left_child_address =
+        Serializer<address_t>::serialize(page.meta()->self);
+    string right_child_address =
+        Serializer<address_t>::serialize(other_page.meta()->self);
+
+    address_t parent_address = page.meta()->parent;
+    if (page.meta()->parent == 0) {
+      address_t alloc_parent_address =
+          BPLUSTREE_INDEX_PAGE_ADDRESS(index_meta_->max_page_id);
+      page.meta()->parent = alloc_parent_address;
+      other_page.meta()->parent = alloc_parent_address;
+    }
+
+    file_->write(page.meta()->self, page.base_address(), PAGE_SIZE);
+    file_->write(other_page.meta()->self, other_page.base_address(), PAGE_SIZE);
+
+    page.scan_use();
+    other_page.scan_use();
+
+    this->Insert(PageType::kInternalPage, parent_address, mid_key,
+                 {left_child_address, right_child_address});
+
+    return ResultCode::NODE_FULL;
   }
 
   file_->write(page.meta()->self, page.base_address(), PAGE_SIZE);
@@ -176,10 +167,10 @@ optional<address_t> BPlusTreeIndex::InsertIntoInternalNode(
  * @param page_address 地址
  * @param key 键
  */
-void BPlusTreeIndex::EraseFromLeafNode(address_t page_address,
-                                       string_view key) {
+ResultCode BPlusTreeIndex::EraseFromLeafNode(address_t page_address,
+                                             string_view key) {
   if (page_address == 0) {
-    return;
+    return ResultCode::OK;
   }
   Page page = Page(PageType::kInternalPage);
   file_->read(page_address, page.base_address(), PAGE_SIZE);
@@ -195,8 +186,7 @@ void BPlusTreeIndex::EraseFromLeafNode(address_t page_address,
       if (meta->free_size >
           sbling_page.meta()->size - sbling_page.meta()->free_size) {
         page.MergePage(sbling_page, true);
-        this->EraseFromLeafNode(meta->parent, key);
-        return;
+        return this->EraseFromLeafNode(meta->parent, key);
       }
     }
 
@@ -205,11 +195,11 @@ void BPlusTreeIndex::EraseFromLeafNode(address_t page_address,
       if (meta->free_size >
           sbling_page.meta()->size - sbling_page.meta()->free_size) {
         page.MergePage(sbling_page, true);
-        this->EraseFromLeafNode(meta->parent, key);
-        return;
+        return this->EraseFromLeafNode(meta->parent, key);
       }
     }
   }
+  return ResultCode::OK;
 }
 
 /**
@@ -218,21 +208,70 @@ void BPlusTreeIndex::EraseFromLeafNode(address_t page_address,
  * @param page_address
  * @param key
  */
-void BPlusTreeIndex::EraseFromInteralNode(address_t page_address,
-                                          string_view key) {
-  return;
+ResultCode BPlusTreeIndex::EraseFromInteralNode(address_t page_address,
+                                                string_view key) {
+  return ResultCode::OK;
 }
 
-/**
- * @brief 开辟空闲页
- *
- * @param page_type
- * @return address_t
- */
-address_t BPlusTreeIndex::AllocEmptyPage(PageType page_type) {
-  address_t page_address = file_->alloc(PAGE_SIZE);
-  Page page(page_type);
-  page.meta()->self = page_address;
-  file_->write(page_address, page.base_address(), PAGE_SIZE);
-  return page_address;
-};
+ResultCode BPlusTreeIndex::Erase(PageType page_type, address_t page_address,
+                                 string_view key) {
+  return ResultCode::OK;
+}
+
+void BPlusTreeIndex::ScanLeafPage() {
+  address_t leaf_node_address = index_meta_->leaf;
+  while (leaf_node_address) {
+    Page page(kLeafPage);
+    file_->read(leaf_node_address, page.base_address(), PAGE_SIZE);
+    leaf_node_address = page.meta()->next;
+    cout << "leaf_node_address=" << leaf_node_address << endl;
+    page.scan_use();
+  }
+}
+
+void BPlusTreeIndex::BFS() {
+  queue<address_t> q;
+  q.push(index_meta_->root);
+  int d = 0;
+  while (q.size()) {
+    int size = q.size();
+    for (int i = 0; i < size; i++) {
+      for (int j = 0; j < d; j++) {
+        cout << "\t";
+      }
+      // cout << q.front() << endl;
+      Page page(kInternalPage);
+      // cout << q.front() << " ";
+      file_->read(q.front(), page.base_address(), PAGE_SIZE);
+      q.pop();
+      auto use = page.get_arribute<RecordMeta>(page.meta()->use);
+      uint16_t offset = page.meta()->use;
+      cout << "Page[meta=" << *page.meta();
+      while (use) {
+        string_view key = {page.base_address() + sizeof(RecordMeta) + offset,
+                           static_cast<size_t>(use->key_len)};
+        if (page.meta()->page_type == kLeafPage) {
+          string_view val = {
+              page.base_address() + sizeof(RecordMeta) + offset + use->key_len,
+              static_cast<size_t>(use->val_len)};
+          cout << "(" << key << ", " << val << ")";
+        } else {
+          address_t val = *reinterpret_cast<address_t *>(
+              page.base_address() + sizeof(RecordMeta) + offset + use->key_len);
+          cout << "(" << key << ", " << val << ")";
+          if (key != "min") {
+            q.push(val);
+          }
+        }
+
+        offset = use->next;
+        use = page.get_arribute<RecordMeta>(use->next);
+      }
+      cout << "]" << endl;
+    }
+    d++;
+    if (d == 3) {
+      return;
+    }
+  }
+}

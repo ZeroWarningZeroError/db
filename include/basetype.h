@@ -23,5 +23,7 @@ concept Comparator = requires(Type& comparator, string_view& lhs,
   ->same_as<int>;
 };
 
-using address_t = uint64_t;
-#define PAGE_SIZE (16 * 1024)
+using address_t = int64_t;
+using page_id_t = int64_t;
+
+#define PAGE_SIZE (16 * 13)

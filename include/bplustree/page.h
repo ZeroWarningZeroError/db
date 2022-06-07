@@ -14,8 +14,8 @@
 #include "base.h"
 #include "basetype.h"
 #include "bplustree/record.h"
-
 #include "memory/buffer.h"
+
 
 using std::optional;
 using std::ostream;
@@ -70,10 +70,10 @@ enum class PageCode { PAGE_FULL, PAGE_KEY_EXIST, PAGE_OK };
  * @brief 磁盘页面
  */
 class Page {
-public:
+ public:
   Page(PageType page_type);
 
-public:
+ public:
   /**
    * @brief 插入记录
    *
@@ -119,10 +119,10 @@ public:
    */
   PageCode MergePage(Page sbling_page, bool is_next);
 
-public:
+ public:
   bool full() const;
 
-public:
+ public:
   uint16_t alloc(uint16_t size) noexcept;
   uint16_t slot(int pos) const noexcept;
   uint16_t slot_offset(int pos) const noexcept;
@@ -171,7 +171,7 @@ public:
    */
   void SplitSlot(int slot_no) noexcept;
 
-public:
+ public:
   uint16_t LowerBound(string_view key, const Compare &compare) noexcept;
   /**
    * @brief 搜索小于目标key的,最大key
@@ -182,7 +182,7 @@ public:
    */
   uint16_t FloorSearch(string_view target_key, const Compare &compare) noexcept;
 
-public:
+ public:
   /**
    * @brief 定位记录的位置
    *
@@ -216,7 +216,7 @@ public:
   int set_record(uint16_t offset, const RecordMeta *meta,
                  const Record *record) noexcept;
 
-public:
+ public:
   /**
    * @brief 填充数据
    *
@@ -269,22 +269,24 @@ public:
    */
   bool TryAlloc(uint16_t size) noexcept;
 
-public:
+ public:
   void scan_use() noexcept;
   void scan_free() noexcept;
   void scan_slots() noexcept;
+  void ScanData() noexcept;
 
-public:
+ public:
   char *base_address() const noexcept;
 
-public:
-  template <typename T> T *get_arribute(uint16_t offset);
+ public:
+  template <typename T>
+  T *get_arribute(uint16_t offset);
   void move(uint16_t src_offset, uint16_t len, uint16_t dst_offset) noexcept;
 
-public:
+ public:
   PageMeta *meta() { return meta_; }
 
-protected:
+ protected:
   PageMeta *meta_;
   char *base_address_;
 
@@ -294,7 +296,8 @@ protected:
   uint16_t vritual_max_record_address_;
 };
 
-template <typename T> T *Page::get_arribute(uint16_t offset) {
+template <typename T>
+T *Page::get_arribute(uint16_t offset) {
   if (offset == 0) {
     return nullptr;
   }
