@@ -695,7 +695,13 @@ Page Page::CopyRecordToNewPage(uint16_t begin_record_address,
   auto min_record_meta = page.get_arribute<RecordMeta>(sizeof(PageMeta));
   min_record_meta->next = page.meta_->heap_top;
 
-  while (record_address != end_record_address) {
+  uint16_t virtual_address = page.meta_->heap_top;
+
+  // todo 优化逻辑
+  bool modified_max_record = end_record_address < virtual_address;
+
+  while (record_address != end_record_address &&
+         record_address >= virtual_address) {
     owned++;
     auto record_meta = this->get_arribute<RecordMeta>(record_address);
     Record record = {
@@ -704,6 +710,7 @@ Page Page::CopyRecordToNewPage(uint16_t begin_record_address,
         .val = {base_address_ + record_address + sizeof(RecordMeta) +
                     record_meta->key_len,
                 record_meta->val_len}};
+
     record_address = record_meta->next;
 
     uint16_t new_page_next_record_address =
@@ -715,7 +722,8 @@ Page Page::CopyRecordToNewPage(uint16_t begin_record_address,
       owned = 0;
     }
 
-    if (record_address != end_record_address) {
+    if (record_address != end_record_address &&
+        record_address >= virtual_address) {
       record_meta->next = new_page_next_record_address;
     }
     page.set_record(page.meta_->heap_top, record_meta, &record);
@@ -725,8 +733,20 @@ Page Page::CopyRecordToNewPage(uint16_t begin_record_address,
 
   auto max_record_meta = page.get_arribute<RecordMeta>(page.slot(1));
   max_record_meta->owned = owned + 1;
-  page_slots[new_page_slot_no++] = end_record_address;
-  page.meta_->slots = new_page_slot_no;
+  page_slots[new_page_slot_no] = end_record_address;
+  if (modified_max_record) {
+    auto record_meta = this->get_arribute<RecordMeta>(record_address);
+    Record record = {
+        .key = {base_address_ + record_address + sizeof(RecordMeta),
+                record_meta->key_len},
+        .val = {base_address_ + record_address + sizeof(RecordMeta) +
+                    record_meta->key_len,
+                record_meta->val_len}};
+    page.set_record(record_address, max_record_meta, &record);
+    page_slots[new_page_slot_no] = record_address;
+  }
+
+  page.meta_->slots = new_page_slot_no + 1;
   memcpy(page.base_address_ + page.slot_offset(0), page_slots,
          sizeof(uint16_t) * page.meta_->slots);
   page.meta_->free_size = page.slot_offset(0) - page.meta_->heap_top;
@@ -916,7 +936,9 @@ void Page::scan_use() noexcept {
     string_view val = {
         base_address_ + sizeof(RecordMeta) + offset + use->key_len,
         static_cast<size_t>(use->val_len)};
-    cout << " " << (*use) << fmt::format("[key={}, val={}]", key, val) << endl;
+    cout << " " << (*use)
+         << fmt::format("[offset={}, key={}, val={}]", offset, key, val)
+         << endl;
     offset = use->next;
     use = get_arribute<RecordMeta>(use->next);
   }

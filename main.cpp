@@ -39,7 +39,7 @@ int main() {
 
   BPlusTreeIndex index("t1.index", cmp);
 
-  for (int i = 1000; i < 1016; i++) {
+  for (int i = 1000; i < 1040; i++) {
     auto code = index.Insert("key" + to_string(i), "val" + to_string(i));
   }
 

@@ -1,4 +1,4 @@
-add_rules("mode.debug", "mode.release")
+add_rules("mode.debug")
 
 set_languages("c++20")
 add_requires("fmt")

@@ -121,6 +121,6 @@ TEST_F(PageTest, testSplitInternalPage) {
   int half = node_size_ / 2;
   int other_size = node_size_ - half;
   ASSERT_EQ(half, page_->meta()->node_size);
-  ASSERT_EQ(other_size, other_page.meta()->node_size);
+  ASSERT_EQ(other_size - 1, other_page.meta()->node_size);
   ASSERT_EQ("key" + to_string(10000 + half), mid_key);
 }

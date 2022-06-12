@@ -120,16 +120,24 @@ ResultCode BPlusTreeIndex::Insert(PageType page_type, address_t page_address,
 
   PageCode code = page.Insert(key, vals, comparator_);
 
-  if (page_type == kInternalPage) {
-    cout << "Internal" << endl;
-    page.scan_use();
-  }
+  // if (page_type == kInternalPage) {
+  //   cout << "Internal" << endl;
+  //   page.scan_use();
+  // }
 
   if (PageCode::PAGE_FULL == code) {
-    page.scan_use();
+    // // page.scan_use();
+    // cout << "SplitPage:" << key << endl;
+    // if (key == "key1010") {
+    //   cout << "debug" << endl;
+    // }
+    // page.scan_use();
+    // page.scan_slots();
     auto [mid_key, other_page] = page.SplitPage();
 
-    cout << "Insert:mid_key=" << mid_key << ",key=" << key << endl;
+    // cout << "Insert:mid_key=" << mid_key << ",key=" << key << endl;
+    // other_page.scan_use();
+    // other_page.scan_slots();
 
     if (key < mid_key) {
       if (PageCode::PAGE_OK != page.Insert(key, vals, comparator_)) {
@@ -140,6 +148,7 @@ ResultCode BPlusTreeIndex::Insert(PageType page_type, address_t page_address,
         return ResultCode::FAIL;
       }
     }
+    // cout << "Insert Mid" << endl;
 
     other_page.meta()->self =
         BPLUSTREE_INDEX_PAGE_ADDRESS(index_meta_->max_page_id++);
@@ -163,9 +172,14 @@ ResultCode BPlusTreeIndex::Insert(PageType page_type, address_t page_address,
     file_->write(page.meta()->self, page.base_address(), PAGE_SIZE);
     file_->write(other_page.meta()->self, other_page.base_address(), PAGE_SIZE);
 
-    page.scan_use();
-    other_page.scan_use();
+    if (page_type == kInternalPage) {
+      this->ModifyParentAddressOfChildren(other_page);
+    }
 
+    // page.scan_use();
+    // page.scan_slots();
+    // other_page.scan_use();
+    // other_page.scan_slots();
     return this->Insert(PageType::kInternalPage, parent_address, mid_key,
                         {left_child_address, right_child_address});
 
@@ -231,6 +245,30 @@ ResultCode BPlusTreeIndex::EraseFromInteralNode(address_t page_address,
 ResultCode BPlusTreeIndex::Erase(PageType page_type, address_t page_address,
                                  string_view key) {
   return ResultCode::OK;
+}
+
+/**
+ * @brief 修改页面孩子节点的父节点地址
+ *
+ * @param page
+ */
+void BPlusTreeIndex::ModifyParentAddressOfChildren(Page &page) {
+  uint16_t record_address =
+      page.get_arribute<RecordMeta>(page.meta()->use)->next;
+  Page child_page(kLeafPage);
+  cout << "ModifyParentAddressOfChildren:";
+  while (record_address != 0) {
+    auto record_meta = page.get_arribute<RecordMeta>(record_address);
+    address_t child_address = *(page.get_arribute<address_t>(
+        record_address + sizeof(RecordMeta) + record_meta->key_len));
+    cout << "(" << child_address << "," << page.meta()->self << ")";
+    file_->read(child_address, child_page.base_address(), PAGE_SIZE);
+    child_page.meta()->parent = page.meta()->self;
+    file_->write(child_address, child_page.base_address(), PAGE_SIZE);
+    record_address = record_meta->next;
+  }
+  cout << endl;
+  return;
 }
 
 void BPlusTreeIndex::ScanLeafPage() {

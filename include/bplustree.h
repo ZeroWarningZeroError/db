@@ -90,6 +90,13 @@ class BPlusTreeIndex {
    */
   ResultCode EraseFromInteralNode(address_t page_address, string_view key);
 
+  /**
+   * @brief 修改页面孩子节点的父节点地址
+   *
+   * @param page
+   */
+  void ModifyParentAddressOfChildren(Page &page);
+
 /**
  * @brief 记录页地址
  *
