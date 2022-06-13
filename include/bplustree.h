@@ -75,22 +75,6 @@ class BPlusTreeIndex {
   ResultCode Erase(PageType page_type, address_t page_address, string_view key);
 
   /**
-   * @brief 从叶子节点删除值
-   *
-   * @param page_address 地址
-   * @param key 键
-   */
-  ResultCode EraseFromLeafNode(address_t page_address, string_view key);
-
-  /**
-   * @brief 从内部节点中删除值
-   *
-   * @param page_address
-   * @param key
-   */
-  ResultCode EraseFromInteralNode(address_t page_address, string_view key);
-
-  /**
    * @brief 修改页面孩子节点的父节点地址
    *
    * @param page

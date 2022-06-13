@@ -16,7 +16,6 @@
 #include "bplustree/record.h"
 #include "memory/buffer.h"
 
-
 using std::optional;
 using std::ostream;
 using std::pair;
@@ -64,7 +63,13 @@ ostream &operator<<(ostream &os, const PageMeta &meta);
  */
 enum PageType { kLeafPage = 0, kInternalPage = 1 };
 
-enum class PageCode { PAGE_FULL, PAGE_KEY_EXIST, PAGE_OK };
+enum class PageCode {
+  PAGE_FULL,
+  PAGE_KEY_EXIST,
+  PAGE_OK,
+  PAGE_FAIL,
+  PAGE_SUCCESS
+};
 
 /**
  * @brief 磁盘页面
@@ -117,10 +122,11 @@ class Page {
    * @param is_next 是否是后继页
    * @return PageCode
    */
-  PageCode MergePage(Page sbling_page, bool is_next);
+  PageCode MergePage(Page &sbling_page, bool is_next);
 
  public:
   bool full() const;
+  uint16_t ValidDataSize() const;
 
  public:
   uint16_t alloc(uint16_t size) noexcept;
@@ -294,6 +300,9 @@ class Page {
 
   uint16_t virtual_min_record_address_;
   uint16_t vritual_max_record_address_;
+
+ public:
+  static uint16_t VIRTUAL_MIN_RECORD_SIZE;
 };
 
 template <typename T>

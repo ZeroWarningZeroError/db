@@ -190,61 +190,36 @@ ResultCode BPlusTreeIndex::Insert(PageType page_type, address_t page_address,
   return ResultCode::SUCCESS;
 }
 
-/**
- * @brief 从叶子节点删除值
- *
- * @param page_address 地址
- * @param key 键
- */
-ResultCode BPlusTreeIndex::EraseFromLeafNode(address_t page_address,
-                                             string_view key) {
-  if (page_address == 0) {
-    return ResultCode::OK;
-  }
-  Page page = Page(PageType::kInternalPage);
+ResultCode BPlusTreeIndex::Erase(PageType page_type, address_t page_address,
+                                 string_view key) {
+  Page page(page_type);
   file_->read(page_address, page.base_address(), PAGE_SIZE);
 
-  page.Erase(key, comparator_);
+  if (!page.Erase(key, comparator_)) {
+    return ResultCode::FAIL;
+  }
 
   auto meta = page.meta();
-
-  if (meta->free_size * 1.0 / meta->size < 0.2) {
-    Page sbling_page(PageType::kInternalPage);
+  uint16_t free_size = meta->size - Page::VIRTUAL_MIN_RECORD_SIZE;
+  if (meta->free_size * 1.0 / free_size <= 0.2) {
+    Page sbling_page(page_type);
     if (meta->next != 0) {
       file_->read(meta->next, sbling_page.base_address(), PAGE_SIZE);
-      if (meta->free_size >
-          sbling_page.meta()->size - sbling_page.meta()->free_size) {
+      if (meta->free_size > sbling_page.ValidDataSize()) {
         page.MergePage(sbling_page, true);
-        return this->EraseFromLeafNode(meta->parent, key);
+        return this->Erase(PageType::kInternalPage, meta->parent, key);
       }
     }
 
     if (meta->prev != 0) {
       file_->read(meta->prev, sbling_page.base_address(), PAGE_SIZE);
-      if (meta->free_size >
-          sbling_page.meta()->size - sbling_page.meta()->free_size) {
-        page.MergePage(sbling_page, true);
-        return this->EraseFromLeafNode(meta->parent, key);
+      if (sbling_page.meta()->free_size >= page.ValidDataSize()) {
+        sbling_page.MergePage(page, true);
+        return this->Erase(PageType::kInternalPage, meta->parent, key);
       }
     }
   }
-  return ResultCode::OK;
-}
-
-/**
- * @brief 从内部节点中删除值
- *
- * @param page_address
- * @param key
- */
-ResultCode BPlusTreeIndex::EraseFromInteralNode(address_t page_address,
-                                                string_view key) {
-  return ResultCode::OK;
-}
-
-ResultCode BPlusTreeIndex::Erase(PageType page_type, address_t page_address,
-                                 string_view key) {
-  return ResultCode::OK;
+  return ResultCode::SUCCESS;
 }
 
 /**
@@ -311,10 +286,14 @@ void BPlusTreeIndex::BFS() {
         } else {
           address_t val = *reinterpret_cast<address_t *>(
               page.base_address() + sizeof(RecordMeta) + offset + use->key_len);
-          cout << "(" << key << ", " << val << ")";
+          cout << "(" << key;
           if (key != "min") {
+            cout << ", " << val;
             q.push(val);
+          } else {
+            cout << ", none";
           }
+          cout << ")";
         }
 
         offset = use->next;
@@ -323,8 +302,8 @@ void BPlusTreeIndex::BFS() {
       cout << "]" << endl;
     }
     d++;
-    if (d == 3) {
-      return;
-    }
+    // if (d == 3) {
+    //   return;
+    // }
   }
 }

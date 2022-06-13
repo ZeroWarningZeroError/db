@@ -22,13 +22,16 @@ using std::to_string;
 #pragma region "PageMeta"
 
 ostream &operator<<(ostream &os, const PageMeta &meta) {
-  return os << fmt::format(
-             "[type=Page, fields=[self={},parent={},prev={}, next={}, "
-             "heap_top={}[{}], "
-             "free={},use={}, slots={}, node_size={}, free_size={}]",
-             meta.self, meta.parent, meta.prev, meta.next, meta.heap_top,
-             sizeof(PageMeta), meta.free, meta.use, meta.slots, meta.node_size,
-             meta.free_size);
+  // return os << fmt::format(
+  //            "[type=Page, fields=[self={},parent={},prev={}, next={}, "
+  //            "heap_top={}[{}], "
+  //            "free={},use={}, slots={}, node_size={}, free_size={}]",
+  //            meta.self, meta.parent, meta.prev, meta.next, meta.heap_top,
+  //            sizeof(PageMeta), meta.free, meta.use, meta.slots,
+  //            meta.node_size, meta.free_size);
+  return os << fmt::format("[type=Page, fields=[self={},parent={}]", meta.self,
+                           meta.parent);
+
   // return os << "[type=Page, fields=["  << meta.prev
   return os;
 }
@@ -36,6 +39,9 @@ ostream &operator<<(ostream &os, const PageMeta &meta) {
 #pragma endregion
 
 #pragma region "Page"
+
+uint16_t Page::VIRTUAL_MIN_RECORD_SIZE =
+    sizeof(RecordMeta) + 3 + sizeof(RecordMeta) + 3 + 8;
 
 Page::Page(PageType page_type) {
   // 这种方式存疑
@@ -330,7 +336,15 @@ pair<string, Page> Page::SplitPage() {
  * @param is_next 是否是后继页
  * @return PageCode
  */
-PageCode Page::MergePage(Page sbling_page, bool is_next) {
+PageCode Page::MergePage(Page &sbling_page, bool is_next) {
+  // if (page.meta()->prev == sbling_page.meta()->self) {
+  //   return sbling_page.MergePage(*this);
+  // }
+
+  // if (page.meta()->next != sbling_page.meta()->self) {
+  //   return PageCode::PAGE_OK;
+  // }
+
   return PageCode::PAGE_OK;
 }
 
@@ -919,6 +933,10 @@ uint16_t Page::Fill(uint16_t offset, string_view data) {
 
 string_view Page::View(uint16_t offset, size_t len) {
   return {base_address_ + offset, len};
+}
+
+uint16_t Page::ValidDataSize() const {
+  return meta_->size - VIRTUAL_MIN_RECORD_SIZE - meta_->free_size;
 }
 
 /**
