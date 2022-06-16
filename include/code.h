@@ -3,9 +3,12 @@
 #define CODE_H
 
 enum class ResultCode {
-  OK,
-  FULL,
-  DUPLICATE_KEY,
+  SUCCESS = 0,
+  FAIL = 1,
+  ERROR_KEY_DUPLICATE = 2,
+  ERROR_KEY_EXIST = 3,
+  ERROR_PAGE_FULL = 4,
+  ERROR_SPACE_NOT_ENOUGH = 5
 };
 
 #endif

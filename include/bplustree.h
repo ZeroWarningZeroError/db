@@ -8,6 +8,7 @@
 
 #include "basetype.h"
 #include "bplustree/page.h"
+#include "code.h"
 #include "file.h"
 
 using std::optional;
@@ -15,8 +16,6 @@ using std::ostream;
 using std::string_view;
 
 class File;
-
-enum class ResultCode { OK, DUPLICATE, FAIL, NOT_EXIST, SUCCESS, NODE_FULL };
 
 struct BPlusTreeIndexMeta {
   address_t root;

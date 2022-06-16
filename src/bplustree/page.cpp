@@ -22,18 +22,19 @@ using std::to_string;
 #pragma region "PageMeta"
 
 ostream &operator<<(ostream &os, const PageMeta &meta) {
-  // return os << fmt::format(
-  //            "[type=Page, fields=[self={},parent={},prev={}, next={}, "
-  //            "heap_top={}[{}], "
-  //            "free={},use={}, slots={}, node_size={}, free_size={}]",
-  //            meta.self, meta.parent, meta.prev, meta.next, meta.heap_top,
-  //            sizeof(PageMeta), meta.free, meta.use, meta.slots,
-  //            meta.node_size, meta.free_size);
-  return os << fmt::format("[type=Page, fields=[self={},parent={}]", meta.self,
-                           meta.parent);
+  return os << fmt::format(
+             "[type=Page, fields=[self={},parent={},prev={}, next={}, "
+             "heap_top={}[{}], "
+             "free={},use={}, slots={}, node_size={}, free_size={}]",
+             meta.self, meta.parent, meta.prev, meta.next, meta.heap_top,
+             sizeof(PageMeta), meta.free, meta.use, meta.slots, meta.node_size,
+             meta.free_size);
+  // return os << fmt::format("[type=Page, fields=[self={},parent={}]",
+  // meta.self,
+  //  meta.parent);
 
   // return os << "[type=Page, fields=["  << meta.prev
-  return os;
+  // return os;
 }
 
 #pragma endregion
@@ -62,10 +63,10 @@ Page::Page(PageType page_type) {
   string virtual_max_key = "max";
 
   virtual_min_record_address_ = sizeof(PageMeta);
-  vritual_max_record_address_ =
+  virtual_max_record_address_ =
       sizeof(PageMeta) + sizeof(RecordMeta) + virtual_min_key.size();
 
-  RecordMeta min_record_meta = {.next = vritual_max_record_address_,
+  RecordMeta min_record_meta = {.next = virtual_max_record_address_,
                                 .owned = 1,
                                 .delete_mask = 0,
                                 .len = 3,
@@ -73,7 +74,7 @@ Page::Page(PageType page_type) {
                                 .val_len = 0,
                                 .slot_no = 0};
 
-  Record min_record = {{virtual_min_key}, {""}};
+  RecordData min_record = {{virtual_min_key}, {""}};
   RecordMeta max_record_meta = {.next = 0,
                                 .owned = 1,
                                 .delete_mask = 0,
@@ -82,7 +83,8 @@ Page::Page(PageType page_type) {
                                 .val_len = 8,
                                 .slot_no = 0};
 
-  Record max_record = {{virtual_max_key}, Serializer<address_t>::serialize(0)};
+  RecordData max_record = {{virtual_max_key},
+                           Serializer<address_t>::serialize(0)};
 
   uint16_t offset =
       this->set_record(sizeof(PageMeta), &min_record_meta, &min_record);
@@ -109,8 +111,8 @@ Page::Page(PageType page_type) {
  * @param compare 比较函数
  * @return bool 是否插入成功
  */
-PageCode Page::Insert(string_view key, const vector<string_view> &vals,
-                      const Compare &compare) {
+ResultCode Page::Insert(string_view key, const vector<string_view> &vals,
+                        const Compare &compare) {
   // 检查插入的值, 是否符合当前页面的要求
   int expected_val_size = meta_->page_type == kLeafPage ? 1 : 2;
   assert(expected_val_size == vals.size());
@@ -139,10 +141,12 @@ PageCode Page::Insert(string_view key, const vector<string_view> &vals,
                       ? prev_record_meta->slot_no
                       : (prev_record_meta->slot_no + 1);
     record_address = this->alloc(record_occupy_size);
+
     // cout << record_address << endl;
     if (record_address == 0) {
-      return PageCode::PAGE_FULL;
+      return ResultCode::ERROR_PAGE_FULL;
     }
+
     this->InsertRecord(prev_record_address, record_address, key, vals[0],
                        compare);
     record_meta = this->get_arribute<RecordMeta>(record_address);
@@ -157,7 +161,7 @@ PageCode Page::Insert(string_view key, const vector<string_view> &vals,
     // 插入key已经存在的情况
     // 1. 对于叶子页, 不允许重复key, 返回插入失败
     if (meta_->page_type == PageType::kLeafPage) {
-      return PageCode::PAGE_KEY_EXIST;
+      return ResultCode::ERROR_KEY_EXIST;
     }
     // 2. 对于内部页, 则修改当前key, 对应的值
     this->Fill(record_address + sizeof(RecordMeta) + key.size(), vals[0]);
@@ -166,15 +170,81 @@ PageCode Page::Insert(string_view key, const vector<string_view> &vals,
   auto next_record_meta = this->get_arribute<RecordMeta>(record_meta->next);
   // 内部节点的插入, 则需要考虑插入值额外逻辑
   if (meta_->page_type == PageType::kInternalPage) {
-    // cout << record_meta->next << endl;
-    // cout << *next_record_meta << endl;
-    // cout << stoi(vals[1]) << endl;
     this->Fill(
         record_meta->next + sizeof(RecordMeta) + next_record_meta->key_len,
         vals[1]);
   }
-  return PageCode::PAGE_OK;
+  return ResultCode::SUCCESS;
 }
+
+/**
+ * @brief 添加记录
+ *
+ * @param page 页记录
+ * @param compare
+ * @return ResultCode
+ */
+ResultCode Page::AppendPage(Page &page, const Compare &compare) {
+  // cout << meta_->free_size << " " << page.ValidDataSize() << endl;
+  if (meta_->free_size < page.ValidDataSize()) {
+    return ResultCode::ERROR_SPACE_NOT_ENOUGH;
+  }
+
+  this->TidyPage();
+  // cout << "TidyPage" << endl;
+
+  // 获取最后一条有效记录地址
+  uint16_t prev_record_address = this->LocateLastRecord();
+  cout << prev_record_address << endl;
+  auto record_meta = this->get_arribute<RecordMeta>(prev_record_address);
+  // cout << *record_meta << endl;
+  string_view last_key = {
+      base_address_ + prev_record_address + sizeof(RecordMeta),
+      record_meta->key_len};
+  auto slot_record_meta =
+      this->get_arribute<RecordMeta>(this->SlotValue(this->meta_->slots - 1));
+
+  // 获取被添加页迭代器
+  auto iter = page.Iterator();
+  if (iter.isEnd()) {
+    return ResultCode::SUCCESS;
+  }
+
+  // 检查是否符合尾添加规则
+  if (compare(last_key, iter->key) < 0) {
+    return ResultCode::FAIL;
+  }
+
+  // cout << "SCAN" << endl;
+
+  // 遍历添加
+  while (!iter.isEnd()) {
+    // 检查是否是虚拟记录
+    if (!iter.isVirtualRecord()) {
+      uint16_t occupy_size =
+          sizeof(RecordMeta) + iter->key.size() + iter->val.size();
+      // 分配空间, 无法分配则终止
+      uint16_t record_address = this->alloc(occupy_size);
+      // cout << page.meta_->heap_top << " " << record_address << " " <<
+      // iter->key
+      //  << " " << iter->val << endl;
+
+      assert(record_address != 0);
+
+      prev_record_address = this->InsertRecord(
+          prev_record_address, record_address, iter->key, iter->val, compare);
+
+      record_meta = this->get_arribute<RecordMeta>(prev_record_address);
+      slot_record_meta->owned++;
+      if (slot_record_meta->owned >= 8) {
+        SplitSlot(this->meta_->slots - 1);
+      }
+    }
+    iter = iter.Next();
+    // cout << iter->key << endl;
+  }
+  return ResultCode::SUCCESS;
+};
 
 /**
  * @brief 删除记录
@@ -183,7 +253,7 @@ PageCode Page::Insert(string_view key, const vector<string_view> &vals,
  * @param compare 比较函数
  * @return bool 是否删除成功
  */
-bool Page::Erase(string_view key, const Compare &compare) {
+ResultCode Page::Erase(string_view key, const Compare &compare) {
   int hit_slot = this->LocateSlot(key, compare);
   uint16_t pre_address = this->slot(hit_slot - 1);
   auto prev = this->get_arribute<RecordMeta>(pre_address);
@@ -204,9 +274,7 @@ bool Page::Erase(string_view key, const Compare &compare) {
 
   // 未命中
   if (compare(key, data) != 0) {
-    cout << *cur << endl;
-    cout << "key=" << key << " hit miss" << endl;
-    return false;
+    return ResultCode::ERROR_KEY_EXIST;
   }
 
   uint16_t next_use_record = cur->next;
@@ -236,7 +304,7 @@ bool Page::Erase(string_view key, const Compare &compare) {
 
   meta_->free_size = meta_->free_size + sizeof(RecordMeta) + cur->len;
   meta_->node_size--;
-  return true;
+  return ResultCode::SUCCESS;
 }
 
 /**
@@ -336,16 +404,17 @@ pair<string, Page> Page::SplitPage() {
  * @param is_next 是否是后继页
  * @return PageCode
  */
-PageCode Page::MergePage(Page &sbling_page, bool is_next) {
-  // if (page.meta()->prev == sbling_page.meta()->self) {
-  //   return sbling_page.MergePage(*this);
-  // }
+ResultCode Page::MergePage(Page &sibling_page, bool is_next) {
+  if (this->meta_->next == sibling_page.meta()->self)
+    // if (page.meta()->prev == sbling_page.meta()->self) {
+    //   return sbling_page.MergePage(*this);
+    // }
 
-  // if (page.meta()->next != sbling_page.meta()->self) {
-  //   return PageCode::PAGE_OK;
-  // }
+    // if (page.meta()->next != sbling_page.meta()->self) {
+    //   return PageCode::PAGE_OK;
+    // }
 
-  return PageCode::PAGE_OK;
+    return ResultCode::SUCCESS;
 }
 
 bool Page::full() const { return true; }
@@ -499,8 +568,9 @@ char *Page::base_address() const noexcept { return base_address_; }
  * @return uint16_t
  */
 uint16_t Page::SlotValue(int slot_no) noexcept {
-  return *reinterpret_cast<uint16_t *>(meta_->size - (meta_->slots - slot_no) *
-                                                         sizeof(uint16_t));
+  return *reinterpret_cast<uint16_t *>(base_address_ + meta_->size -
+                                       (meta_->slots - slot_no) *
+                                           sizeof(uint16_t));
 }
 
 /**
@@ -631,7 +701,7 @@ void Page::set_slot(int slot_no, uint16_t address) noexcept {
  * @return int 写入数据大小
  */
 int Page::set_record(uint16_t offset, const RecordMeta *meta,
-                     const Record *record) noexcept {
+                     const RecordData *record) noexcept {
   memcpy(base_address_ + offset, meta, sizeof(RecordMeta));
   memcpy(base_address_ + offset + sizeof(RecordMeta), record->key.data(),
          meta->key_len);
@@ -718,7 +788,7 @@ Page Page::CopyRecordToNewPage(uint16_t begin_record_address,
          record_address >= virtual_address) {
     owned++;
     auto record_meta = this->get_arribute<RecordMeta>(record_address);
-    Record record = {
+    RecordData record = {
         .key = {base_address_ + record_address + sizeof(RecordMeta),
                 record_meta->key_len},
         .val = {base_address_ + record_address + sizeof(RecordMeta) +
@@ -750,7 +820,7 @@ Page Page::CopyRecordToNewPage(uint16_t begin_record_address,
   page_slots[new_page_slot_no] = end_record_address;
   if (modified_max_record) {
     auto record_meta = this->get_arribute<RecordMeta>(record_address);
-    Record record = {
+    RecordData record = {
         .key = {base_address_ + record_address + sizeof(RecordMeta),
                 record_meta->key_len},
         .val = {base_address_ + record_address + sizeof(RecordMeta) +
@@ -878,6 +948,43 @@ uint16_t Page::LocateRecord(uint16_t record_no) noexcept {
 }
 
 /**
+ * @brief 定位记录的位置
+ *
+ * @param slot_no 槽索引
+ * @param record_no 槽内记录索引
+ * @return uint16_t 记录位置
+ */
+uint16_t Page::LocateRecord(uint16_t slot_no, uint16_t record_no) noexcept {
+  auto prev = this->get_arribute<RecordMeta>(this->SlotValue(slot_no - 1));
+  auto no = 0;
+  while (prev != nullptr && prev->next != 0) {
+    auto cur = this->get_arribute<RecordMeta>(prev->next);
+    if (cur->owned) {
+      return 0;
+    }
+    if (no == record_no) {
+      return prev->next;
+    }
+    prev = cur;
+    no++;
+  }
+  return 0;
+}
+
+/**
+ * @brief 定位Page中的最后一条记录
+ *
+ * @return uint16_t
+ */
+uint16_t Page::LocateLastRecord() noexcept {
+  // todo bug owned = 1
+  int slot_no = this->meta_->slots - 1;
+  int record_no =
+      this->get_arribute<RecordMeta>(this->SlotValue(slot_no))->owned - 1;
+  return LocateRecord(slot_no, record_no - 1);
+}
+
+/**
  * @brief 插入数据
  *
  * @param prev_record_address 插入的位置
@@ -891,7 +998,7 @@ uint16_t Page::InsertRecord(uint16_t prev_record_address,
                             string_view val, const Compare &compare) {
   auto prev = this->get_arribute<RecordMeta>(prev_record_address);
 
-  Record new_record = {
+  RecordData new_record = {
       .key = key,
       .val = val,
   };
@@ -927,10 +1034,6 @@ uint16_t Page::Fill(uint16_t offset, string_view data) {
   return 0;
 }
 
-// uint16_t Page::Fill(uint16_t offset, uint16_t len, IReader *reader) {
-//   reader->read(offset, base_address_, len);
-// }
-
 string_view Page::View(uint16_t offset, size_t len) {
   return {base_address_ + offset, len};
 }
@@ -938,6 +1041,13 @@ string_view Page::View(uint16_t offset, size_t len) {
 uint16_t Page::ValidDataSize() const {
   return meta_->size - VIRTUAL_MIN_RECORD_SIZE - meta_->free_size;
 }
+
+/**
+ * @brief 获取迭代器
+ *
+ * @return Iterator<Record>
+ */
+Iterator<Record> Page::Iterator() noexcept { return {this, meta_->use}; }
 
 /**
  * @brief 遍历页面中的节点

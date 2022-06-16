@@ -14,6 +14,7 @@
 #include "base.h"
 #include "basetype.h"
 #include "bplustree/record.h"
+#include "code.h"
 #include "memory/buffer.h"
 
 using std::optional;
@@ -85,10 +86,10 @@ class Page {
    * @param key 键
    * @param vals 值, 对应叶子节点vals包含一个值, 对于内部节点vals传两个值
    * @param compare 比较函数
-   * @return bool 是否插入成功
+   * @return ResultCode 返回插入状态
    */
-  PageCode Insert(string_view key, const vector<string_view> &vals,
-                  const Compare &compare);
+  ResultCode Insert(string_view key, const vector<string_view> &vals,
+                    const Compare &compare);
 
   /**
    * @brief 删除记录
@@ -97,7 +98,16 @@ class Page {
    * @param compare 比较函数
    * @return bool 是否删除成功
    */
-  bool Erase(string_view key, const Compare &compare);
+  ResultCode Erase(string_view key, const Compare &compare);
+
+  /**
+   * @brief 添加记录
+   *
+   * @param page 页记录
+   * @param compare
+   * @return ResultCode
+   */
+  ResultCode AppendPage(Page &page, const Compare &compare);
 
   /**
    * @brief 搜索记录
@@ -122,7 +132,7 @@ class Page {
    * @param is_next 是否是后继页
    * @return PageCode
    */
-  PageCode MergePage(Page &sbling_page, bool is_next);
+  ResultCode MergePage(Page &sbling_page, bool is_next);
 
  public:
   bool full() const;
@@ -207,6 +217,13 @@ class Page {
   uint16_t LocateRecord(uint16_t slot_no, uint16_t record_no) noexcept;
 
   /**
+   * @brief 定位Page中的最后一条记录
+   *
+   * @return uint16_t
+   */
+  uint16_t LocateLastRecord() noexcept;
+
+  /**
    * @brief 插入记录
    *
    * @param prev_record_address 插入记录的前驱节点
@@ -220,7 +237,15 @@ class Page {
                         string_view key, string_view val,
                         const Compare &compare);
   int set_record(uint16_t offset, const RecordMeta *meta,
-                 const Record *record) noexcept;
+                 const RecordData *record) noexcept;
+
+ public:
+  /**
+   * @brief 获取迭代器
+   *
+   * @return Iterator<Record>
+   */
+  Iterator<Record> Iterator() noexcept;
 
  public:
   /**
@@ -292,14 +317,15 @@ class Page {
  public:
   PageMeta *meta() { return meta_; }
 
- protected:
+ public:
   PageMeta *meta_;
   char *base_address_;
 
   shared_ptr<char> page_data_;
 
   uint16_t virtual_min_record_address_;
-  uint16_t vritual_max_record_address_;
+  uint16_t virtual_max_record_address_;
+  uint16_t last_record_address_;
 
  public:
   static uint16_t VIRTUAL_MIN_RECORD_SIZE;
@@ -328,8 +354,8 @@ T *Page::get_arribute(uint16_t offset) {
 
 //         // 设置虚拟记录
 //         RecordMeta min_record_meta = {sizeof(Page) + sizeof(RecordMeta) + 3,
-//         1, 0, 3, 3, 0, 0}; Record min_record = {{"min"}, {""}}; RecordMeta
-//         max_record_meta = {0, 1, 0, 3, 3, 0, 0}; Record max_record =
+//         1, 0, 3, 3, 0, 0}; min_record = {{"min"}, {""}}; RecordMeta
+//         max_record_meta = {0, 1, 0, 3, 3, 0, 0}; max_record =
 //         {{"max"}, {""}};
 
 //         uint16_t offset = page->set_record(sizeof(Page), &min_record_meta,

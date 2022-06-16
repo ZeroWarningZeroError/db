@@ -59,9 +59,11 @@ ResultCode BPlusTreeIndex::Insert(string_view key, string_view val) {
  * @brief 删除值
  *
  * @param key 键
- * @return optional<address_t>
+ * @return ResultCode
  */
-ResultCode BPlusTreeIndex::Erase(string_view key) { return ResultCode::OK; }
+ResultCode BPlusTreeIndex::Erase(string_view key) {
+  return ResultCode::SUCCESS;
+}
 
 /**
  * @brief 搜索值
@@ -118,14 +120,14 @@ ResultCode BPlusTreeIndex::Insert(PageType page_type, address_t page_address,
     }
   }
 
-  PageCode code = page.Insert(key, vals, comparator_);
+  ResultCode code = page.Insert(key, vals, comparator_);
 
   // if (page_type == kInternalPage) {
   //   cout << "Internal" << endl;
   //   page.scan_use();
   // }
 
-  if (PageCode::PAGE_FULL == code) {
+  if (ResultCode::ERROR_PAGE_FULL == code) {
     // // page.scan_use();
     // cout << "SplitPage:" << key << endl;
     // if (key == "key1010") {
@@ -140,11 +142,11 @@ ResultCode BPlusTreeIndex::Insert(PageType page_type, address_t page_address,
     // other_page.scan_slots();
 
     if (key < mid_key) {
-      if (PageCode::PAGE_OK != page.Insert(key, vals, comparator_)) {
+      if (ResultCode::SUCCESS != page.Insert(key, vals, comparator_)) {
         return ResultCode::FAIL;
       }
     } else {
-      if (PageCode::PAGE_OK != other_page.Insert(key, vals, comparator_)) {
+      if (ResultCode::SUCCESS != other_page.Insert(key, vals, comparator_)) {
         return ResultCode::FAIL;
       }
     }
@@ -195,26 +197,26 @@ ResultCode BPlusTreeIndex::Erase(PageType page_type, address_t page_address,
   Page page(page_type);
   file_->read(page_address, page.base_address(), PAGE_SIZE);
 
-  if (!page.Erase(key, comparator_)) {
+  if (ResultCode::SUCCESS != page.Erase(key, comparator_)) {
     return ResultCode::FAIL;
   }
 
   auto meta = page.meta();
   uint16_t free_size = meta->size - Page::VIRTUAL_MIN_RECORD_SIZE;
   if (meta->free_size * 1.0 / free_size <= 0.2) {
-    Page sbling_page(page_type);
+    Page sibling_page(page_type);
     if (meta->next != 0) {
       file_->read(meta->next, sbling_page.base_address(), PAGE_SIZE);
       if (meta->free_size > sbling_page.ValidDataSize()) {
-        page.MergePage(sbling_page, true);
+        page.AppendPage(sibling_page);
         return this->Erase(PageType::kInternalPage, meta->parent, key);
       }
     }
 
     if (meta->prev != 0) {
       file_->read(meta->prev, sbling_page.base_address(), PAGE_SIZE);
-      if (sbling_page.meta()->free_size >= page.ValidDataSize()) {
-        sbling_page.MergePage(page, true);
+      if (sibling_page.meta()->free_size >= page.ValidDataSize()) {
+        sibling_page.AppendPage(page);
         return this->Erase(PageType::kInternalPage, meta->parent, key);
       }
     }
