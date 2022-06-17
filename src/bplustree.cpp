@@ -202,26 +202,71 @@ ResultCode BPlusTreeIndex::Erase(PageType page_type, address_t page_address,
   }
 
   auto meta = page.meta();
+
+  // 如果根节点为空, 则将根节点往下移动
+  if (index_meta_->root == meta->self && meta->node_size == 0) {
+    string_view child_address = page.Value(page.virtual_min_record_address_);
+    index_meta_->root = Serializer<address_t>::deserialize(
+        {child_address.data(), child_address.length()});
+    return ResultCode::SUCCESS;
+  }
+
+  // 页合并的下限
   uint16_t free_size = meta->size - Page::VIRTUAL_MIN_RECORD_SIZE;
   if (meta->free_size * 1.0 / free_size <= 0.2) {
     Page sibling_page(page_type);
+    Page parent(kInternalPage);
+
+    ResultCode code = ResultCode::SUCCESS;
+
     if (meta->next != 0) {
-      file_->read(meta->next, sbling_page.base_address(), PAGE_SIZE);
-      if (meta->free_size > sbling_page.ValidDataSize()) {
-        page.AppendPage(sibling_page);
-        return this->Erase(PageType::kInternalPage, meta->parent, key);
-      }
+      code = EraseParentAndMergeSibling(page_type, page_address, meta->next);
     }
 
-    if (meta->prev != 0) {
-      file_->read(meta->prev, sbling_page.base_address(), PAGE_SIZE);
-      if (sibling_page.meta()->free_size >= page.ValidDataSize()) {
-        sibling_page.AppendPage(page);
-        return this->Erase(PageType::kInternalPage, meta->parent, key);
-      }
+    if (ResultCode::ERROR_NOT_MATCH_CONSTRAINT == code && meta->prev != 0) {
+      code = EraseParentAndMergeSibling(page_type, meta->prev, page_address);
+    }
+
+    if (ResultCode::ERROR_NOT_MATCH_CONSTRAINT != code) {
+      return code;
     }
   }
   return ResultCode::SUCCESS;
+}
+
+ResultCode BPlusTreeIndex::EraseParentAndMergeSibling(
+    PageType page_type, address_t left_child_address,
+    address_t right_child_address) {
+  Page left_child(page_type), right_child(page_type), parent(kInternalPage);
+  file_->read(left_child_address, left_child.base_address(), PAGE_SIZE);
+  file_->read(right_child_address, right_child.base_address(), PAGE_SIZE);
+
+  if (left_child.meta()->free_size < right_child.ValidDataSize()) {
+    return ResultCode::ERROR_NOT_MATCH_CONSTRAINT;
+  }
+
+  if (left_child.meta()->parent != right_child.meta()->parent) {
+    return ResultCode::ERROR_NOT_MATCH_CONSTRAINT;
+  }
+
+  file_->read(left_child.meta()->parent, parent.base_address(), PAGE_SIZE);
+
+  auto last_key_iter = left_child.GetLastIterator();
+
+  auto parent_key_address = parent.LowerBound(last_key_iter->key, comparator_);
+
+  auto parent_key = parent.Key(parent_key_address);
+
+  if (PageType::kInternalPage == page_type) {
+    left_child.Append(parent_key, last_key_iter->val, comparator_);
+  }
+
+  left_child.AppendPage(right_child, comparator_);
+  left_child.meta()->self = right_child.meta()->self;
+
+  file_->write(left_child.meta()->self, left_child.base_address(), PAGE_SIZE);
+  return this->Erase(PageType::kInternalPage, left_child.meta()->parent,
+                     parent_key);
 }
 
 /**

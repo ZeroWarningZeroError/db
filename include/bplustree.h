@@ -73,6 +73,10 @@ class BPlusTreeIndex {
 
   ResultCode Erase(PageType page_type, address_t page_address, string_view key);
 
+  ResultCode EraseParentAndMergeSibling(PageType page_type,
+                                        address_t left_child,
+                                        address_t right_child);
+
   /**
    * @brief 修改页面孩子节点的父节点地址
    *

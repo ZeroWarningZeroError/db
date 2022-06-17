@@ -103,6 +103,16 @@ class Page {
   /**
    * @brief 添加记录
    *
+   * @param key
+   * @param val
+   * @param compare
+   * @return ResultCode
+   */
+  ResultCode Append(string_view key, string_view val, const Compare &compare);
+
+  /**
+   * @brief 添加记录
+   *
    * @param page 页记录
    * @param compare
    * @return ResultCode
@@ -133,6 +143,13 @@ class Page {
    * @return PageCode
    */
   ResultCode MergePage(Page &sbling_page, bool is_next);
+
+  /**
+   * @brief 获取最后一天有效记录迭代器
+   *
+   * @return Iterator<Record>
+   */
+  Iterator<Record> GetLastIterator();
 
  public:
   bool full() const;
@@ -188,6 +205,13 @@ class Page {
   void SplitSlot(int slot_no) noexcept;
 
  public:
+  /**
+   * @brief 大于等于目标key的, 最小key
+   *
+   * @param key
+   * @param compare
+   * @return uint16_t
+   */
   uint16_t LowerBound(string_view key, const Compare &compare) noexcept;
   /**
    * @brief 搜索小于目标key的,最大key
@@ -257,15 +281,6 @@ class Page {
    */
   uint16_t Fill(uint16_t offset, string_view data);
 
-  // /**
-  //  * @brief 填充数据
-  //  *
-  //  * @param offset 偏移量
-  //  * @param reader 数据来源
-  //  * @return uint16_t
-  //  */
-  // uint16_t Fill(uint16_t offset, uint16_t len, IReader *reader);
-
   /**
    * @brief 生成数据视图
    *
@@ -312,6 +327,10 @@ class Page {
  public:
   template <typename T>
   T *get_arribute(uint16_t offset);
+
+  string_view Key(uint16_t record_address);
+  string_view Value(uint16_t record_address);
+
   void move(uint16_t src_offset, uint16_t len, uint16_t dst_offset) noexcept;
 
  public:
@@ -338,49 +357,5 @@ T *Page::get_arribute(uint16_t offset) {
   }
   return reinterpret_cast<T *>(base_address_ + offset);
 }
-
-// 初始化构造
-// template<>
-// struct Constructor<Page> {
-//     template<typename... Args>
-//     static Page* construct(void* address, Args... args) {
-//         Page* page = (Page*)address;
-//         *page = {args...};
-
-//         // 设置基本属性
-//         page->slots = 2;
-//         page->size = PAGE_SIZE;
-//         page->use = sizeof(Page);
-
-//         // 设置虚拟记录
-//         RecordMeta min_record_meta = {sizeof(Page) + sizeof(RecordMeta) + 3,
-//         1, 0, 3, 3, 0, 0}; min_record = {{"min"}, {""}}; RecordMeta
-//         max_record_meta = {0, 1, 0, 3, 3, 0, 0}; max_record =
-//         {{"max"}, {""}};
-
-//         uint16_t offset = page->set_record(sizeof(Page), &min_record_meta,
-//         &min_record); uint16_t address1 = sizeof(Page);
-//         memcpy(page->base_address() + page->slot_offset(0), &address1,
-//         sizeof(uint16_t));
-
-//         uint16_t address2 = sizeof(Page) + offset;
-//         offset += page->set_record(sizeof(Page) + offset, &max_record_meta,
-//         &max_record); memcpy(page->base_address() + page->slot_offset(1),
-//         &address2, sizeof(uint16_t));
-
-//         page->heap_top = sizeof(Page) + offset;
-//         page->free_size = page->size - page->heap_top - page->slots *
-//         sizeof(uint16_t); return page;
-//     }
-// };
-
-// template<>
-// struct Constructor<LeafPage> {
-//   template<typename... Args>
-//   static LeafPage* construct(void* address, Args... args) {
-//     return reinterpret_cast<LeafPage*>(Constructor<Page>::construct(address,
-//     args...));
-//   }
-// };
 
 #endif

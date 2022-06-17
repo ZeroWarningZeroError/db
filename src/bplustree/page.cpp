@@ -180,6 +180,34 @@ ResultCode Page::Insert(string_view key, const vector<string_view> &vals,
 /**
  * @brief 添加记录
  *
+ * @param key
+ * @param val
+ * @param compare
+ * @return ResultCode
+ */
+ResultCode Page::Append(string_view key, string_view val,
+                        const Compare &compare) {
+  uint16_t prev_record_address = this->LocateLastRecord();
+  uint16_t occupy_size = sizeof(RecordMeta) + key.size() + val.size();
+  // 分配空间, 无法分配则终止
+  uint16_t record_address = this->alloc(occupy_size);
+  assert(record_address != 0);
+
+  this->InsertRecord(prev_record_address, record_address, key, val, compare);
+
+  auto slot_record_meta =
+      this->get_arribute<RecordMeta>(this->SlotValue(this->meta_->slots - 1));
+
+  slot_record_meta->owned++;
+  if (slot_record_meta->owned >= 8) {
+    SplitSlot(this->meta_->slots - 1);
+  }
+  return ResultCode::SUCCESS;
+}
+
+/**
+ * @brief 添加记录
+ *
  * @param page 页记录
  * @param compare
  * @return ResultCode
@@ -415,6 +443,16 @@ ResultCode Page::MergePage(Page &sibling_page, bool is_next) {
     // }
 
     return ResultCode::SUCCESS;
+}
+
+/**
+ * @brief 获取最后一天有效记录迭代器
+ *
+ * @return Iterator<Record>
+ */
+Iterator<Record> Page::GetLastIterator() {
+  uint16_t record_address = this->LocateLastRecord();
+  return {this, record_address};
 }
 
 bool Page::full() const { return true; }
@@ -1048,6 +1086,16 @@ uint16_t Page::ValidDataSize() const {
  * @return Iterator<Record>
  */
 Iterator<Record> Page::Iterator() noexcept { return {this, meta_->use}; }
+
+string_view Page::Key(uint16_t record_address) {
+  auto meta = this->get_arribute<RecordMeta>(record_address);
+  return this->View(record_address + sizeof(RecordMeta), meta->key_len);
+}
+string_view Page::Value(uint16_t record_address) {
+  auto meta = this->get_arribute<RecordMeta>(record_address);
+  return this->View(record_address + sizeof(RecordMeta) + meta->key_len,
+                    meta->val_len);
+}
 
 /**
  * @brief 遍历页面中的节点
