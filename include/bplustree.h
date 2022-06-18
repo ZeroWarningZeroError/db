@@ -55,9 +55,9 @@ class BPlusTreeIndex {
    * @brief 搜索值
    *
    * @param key 键
-   * @return optional<address_t>
+   * @return optional<string>
    */
-  optional<address_t> Search(string_view key);
+  optional<string> Search(string_view key);
 
  private:
   /**

@@ -302,7 +302,7 @@ ResultCode Page::Erase(string_view key, const Compare &compare) {
 
   // 未命中
   if (compare(key, data) != 0) {
-    return ResultCode::ERROR_KEY_EXIST;
+    return ResultCode::ERROR_KEY_NOT_EXIST;
   }
 
   uint16_t next_use_record = cur->next;
@@ -342,7 +342,7 @@ ResultCode Page::Erase(string_view key, const Compare &compare) {
  * @param compare 比较函数
  * @return optional<string_view>
  */
-optional<string_view> Page::Search(string_view key, const Compare &compare) {
+optional<string> Page::Search(string_view key, const Compare &compare) {
   uint16_t hit_slot = this->LocateSlot(key, compare);
   uint16_t pre_address = this->slot(hit_slot - 1);
   auto prev = this->get_arribute<RecordMeta>(pre_address);
@@ -1015,11 +1015,13 @@ uint16_t Page::LocateRecord(uint16_t slot_no, uint16_t record_no) noexcept {
  * @return uint16_t
  */
 uint16_t Page::LocateLastRecord() noexcept {
-  // todo bug owned = 1
   int slot_no = this->meta_->slots - 1;
-  int record_no =
-      this->get_arribute<RecordMeta>(this->SlotValue(slot_no))->owned - 1;
-  return LocateRecord(slot_no, record_no - 1);
+  auto record_meta = this->get_arribute<RecordMeta>(this->SlotValue(slot_no));
+  int record_no = record_meta->owned - 2;
+  if (record_no < 0) {
+    return this->SlotValue(slot_no - 1);
+  }
+  return LocateRecord(slot_no, record_no);
 }
 
 /**
@@ -1077,7 +1079,8 @@ string_view Page::View(uint16_t offset, size_t len) {
 }
 
 uint16_t Page::ValidDataSize() const {
-  return meta_->size - VIRTUAL_MIN_RECORD_SIZE - meta_->free_size;
+  return meta_->size - VIRTUAL_MIN_RECORD_SIZE - sizeof(PageMeta) -
+         meta_->free_size;
 }
 
 /**

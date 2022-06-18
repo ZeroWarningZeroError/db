@@ -124,9 +124,9 @@ class Page {
    *
    * @param key 记录对应的键
    * @param compare 比较函数
-   * @return optional<string_view>
+   * @return optional<string>
    */
-  optional<string_view> Search(string_view key, const Compare &compare);
+  optional<string> Search(string_view key, const Compare &compare);
 
   /**
    * @brief 分裂页

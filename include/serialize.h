@@ -5,7 +5,8 @@
 
 using std::string;
 
-template <typename T> struct Serializer {
+template <typename T>
+struct Serializer {
   static string serialize(T obj) {
     string data(sizeof(T), 0);
     memcpy(data.data(), &obj, sizeof(T));
@@ -16,10 +17,5 @@ template <typename T> struct Serializer {
     return *reinterpret_cast<const T *>(data.data());
   }
 };
-
-// template<>
-// struct string Serializer<vector<int>> {
-
-// };
 
 #endif

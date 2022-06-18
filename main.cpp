@@ -21,6 +21,13 @@ struct Test {
   int b;
 };
 
+auto cmp = [](string_view v1, string_view v2) -> int {
+  if (v1 == v2) {
+    return 0;
+  }
+  return v1 < v2 ? 1 : -1;
+};
+
 string_view GetKey(Page *page, uint16_t record_address) {
   RecordMeta *meta = page->get_arribute<RecordMeta>(record_address);
   string_view key = {page->base_address() + record_address + sizeof(RecordMeta),
@@ -29,36 +36,36 @@ string_view GetKey(Page *page, uint16_t record_address) {
   return key;
 }
 
-int main() {
-  auto cmp = [](string_view v1, string_view v2) -> int {
-    if (v1 == v2) {
-      return 0;
-    }
-    return v1 < v2 ? 1 : -1;
-  };
+void Search(BPlusTreeIndex &index, string_view key) {
+  auto result = index.Search(key);
+  if (result.has_value()) {
+    cout << "key=" << key << ",value=" << result.value() << endl;
+  } else {
+    cout << "key no exist" << endl;
+  }
+}
 
+int main() {
   BPlusTreeIndex index("t1.index", cmp);
 
-  for (int i = 1000; i < 3000; i++) {
+  for (int i = 1000; i < 1010; i++) {
     auto code = index.Insert("key" + to_string(i), "val" + to_string(i));
-    // if (i >= 1035) {
-    //   index.BFS();
-    // }
   }
 
   index.BFS();
 
-  // cout << sizeof(RecordMeta) << endl;
-  // cout << sizeof(PageMeta) << endl;
+  Search(index, "key1000");
+  Search(index, "key1010");
+  Search(index, "key1017");
+  Search(index, "key2222222");
+  Search(index, "key0000");
 
-  // cout << (PAGE_SIZE - sizeof(PageMeta)) << endl;
+  index.Erase("key1000");
+  index.BFS();
+  index.Erase("key1001");
+  index.BFS();
+  index.Erase("key1002");
+  index.BFS();
 
-  // Page page(kLeafPage);
-
-  // for (int i = 0; i < 100; i++) {
-  //   page.Insert("key" + to_string(i), {"val" + to_string(i)}, cmp);
-  // }
-
-  // cout << *page.meta() << endl;
   return 0;
 }
