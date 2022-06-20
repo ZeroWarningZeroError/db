@@ -149,6 +149,7 @@ ResultCode BPlusTreeIndex::Insert(PageType page_type, address_t page_address,
       if (ResultCode::SUCCESS != page.Insert(key, vals, comparator_)) {
         return ResultCode::FAIL;
       }
+
     } else {
       if (ResultCode::SUCCESS != other_page.Insert(key, vals, comparator_)) {
         return ResultCode::FAIL;
@@ -189,11 +190,25 @@ ResultCode BPlusTreeIndex::Insert(PageType page_type, address_t page_address,
     return this->Insert(PageType::kInternalPage, parent_address, mid_key,
                         {left_child_address, right_child_address});
 
+    // file_->read(page.meta()->self, )
+
+    // Page parent(kInternalPage);
+    // file_->read(page.meta()->parent, parent.base_address(), PAGE_SIZE);
+    // uint16_t parent_key_offset = parent.LowerBound(mid_key, comparator_);
+    // page.meta()->parent_key_offset = parent_key_offset;
+    // other_page.meta()->parent_key_offset =
+    //     parent.get_arribute<RecordMeta>(parent_key_offset)->next;
+
+    // file_->write(other_page.meta()->self, other_page.base_address(),
+    // PAGE_SIZE);
+
+    // return code;
     // return ResultCode::NODE_FULL;
   }
 
   file_->write(page.meta()->self, page.base_address(), PAGE_SIZE);
-  return ResultCode::SUCCESS;
+  return code;
+  // return ResultCode::SUCCESS;
 }
 
 ResultCode BPlusTreeIndex::Erase(PageType page_type, address_t page_address,
@@ -203,6 +218,7 @@ ResultCode BPlusTreeIndex::Erase(PageType page_type, address_t page_address,
 
   // 检查是否有节点被删除
   if (ResultCode::ERROR_KEY_NOT_EXIST == page.Erase(key, comparator_)) {
+    // page.scan_use();
     cout << "key_not_exist" << endl;
     return ResultCode::ERROR_KEY_NOT_EXIST;
   }
@@ -224,6 +240,16 @@ ResultCode BPlusTreeIndex::Erase(PageType page_type, address_t page_address,
   }
 
   file_->write(meta->self, page.base_address(), PAGE_SIZE);
+
+  if (meta->node_size == 0) {
+    page.scan_use();
+    Page parent(kInternalPage);
+    file_->read(meta->parent, parent.base_address(), PAGE_SIZE);
+    auto parent_need_erase_key =
+        parent.Key(parent.LowerBound(key, comparator_));
+    return this->Erase(PageType::kInternalPage, meta->parent,
+                       parent_need_erase_key);
+  }
 
   // 页合并的下限
   uint16_t data_size =
@@ -273,27 +299,25 @@ ResultCode BPlusTreeIndex::EraseParentAndMergeSibling(
 
   left_child.scan_use();
 
-  // file_->read(left_child.meta()->parent, parent.base_address(), PAGE_SIZE);
+  file_->read(left_child.meta()->parent, parent.base_address(), PAGE_SIZE);
 
   // auto first_key_iter = right_child.Iterator().Next();
+  auto last_key_iter = left_child.GetLastIterator();
 
-  // auto parent_key_address =
-  //     parent.FloorSearch(first_key_iter->key, comparator_);
+  auto parent_key_address = parent.LowerBound(last_key_iter->key, comparator_);
 
-  // auto parent_key = parent.Key(parent_key_address);
+  auto parent_key = parent.Key(parent_key_address);
 
-  // if (PageType::kInternalPage == page_type) {
-  //   left_child.Append(parent_key, first_key_iter->val, comparator_);
-  // }
+  if (PageType::kInternalPage == page_type) {
+    left_child.Append(parent_key, last_key_iter->val, comparator_);
+  }
 
-  // left_child.AppendPage(right_child, comparator_);
-  // left_child.meta()->self = right_child.meta()->self;
+  left_child.AppendPage(right_child, comparator_);
+  left_child.meta()->self = right_child.meta()->self;
 
-  // file_->write(left_child.meta()->self, left_child.base_address(),
-  // PAGE_SIZE); return this->Erase(PageType::kInternalPage,
-  // left_child.meta()->parent,
-  //                    parent_key);
-  return ResultCode::SUCCESS;
+  file_->write(left_child.meta()->self, left_child.base_address(), PAGE_SIZE);
+  return this->Erase(PageType::kInternalPage, left_child.meta()->parent,
+                     parent_key);
 }
 
 /**

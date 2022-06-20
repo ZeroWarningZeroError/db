@@ -50,6 +50,8 @@ struct PageMeta {
   uint16_t page_type;
   // 节点数量
   uint16_t node_size;
+  // 页在父节点对应的位置
+  uint16_t parent_key_offset;
   // 可用空间
   uint32_t free_size;
   // 页面大小

@@ -22,16 +22,15 @@ using std::to_string;
 #pragma region "PageMeta"
 
 ostream &operator<<(ostream &os, const PageMeta &meta) {
-  return os << fmt::format(
-             "[type=Page, fields=[self={},parent={},prev={}, next={}, "
-             "heap_top={}[{}], "
-             "free={},use={}, slots={}, node_size={}, free_size={}]",
-             meta.self, meta.parent, meta.prev, meta.next, meta.heap_top,
-             sizeof(PageMeta), meta.free, meta.use, meta.slots, meta.node_size,
-             meta.free_size);
-  // return os << fmt::format("[type=Page, fields=[self={},parent={}]",
-  // meta.self,
-  //  meta.parent);
+  // return os << fmt::format(
+  //            "[type=Page, fields=[self={},parent={},prev={}, next={}, "
+  //            "heap_top={}[{}], "
+  //            "free={},use={}, slots={}, node_size={}, free_size={}]",
+  //            meta.self, meta.parent, meta.prev, meta.next, meta.heap_top,
+  //            sizeof(PageMeta), meta.free, meta.use, meta.slots,
+  //            meta.node_size, meta.free_size);
+  return os << fmt::format("[type=Page, fields=[self={},parent={}]", meta.self,
+                           meta.parent);
 
   // return os << "[type=Page, fields=["  << meta.prev
   // return os;
@@ -56,6 +55,7 @@ Page::Page(PageType page_type) {
   meta_->size = PAGE_SIZE;
   meta_->use = sizeof(PageMeta);
   meta_->page_type = page_type;
+  meta_->parent_key_offset = 0;
 
   base_address_ = page_data_.get();
   // 设置虚拟记录
@@ -370,11 +370,13 @@ optional<string> Page::Search(string_view key, const Compare &compare) {
  * @return pair<string_view, SharedBuffer<Page>>
  */
 pair<string, Page> Page::SplitPage() {
+  assert(meta_->node_size >= 3);
   uint16_t half = (meta_->node_size) / 2;
   uint16_t prev_record_address = this->LocateRecord(half - 1);
-  auto prev_record_meta = this->get_arribute<RecordMeta>(prev_record_address);
+  uint16_t mid_record_address = this->LocateRecord(half);
 
-  auto mid_record_meta = this->get_arribute<RecordMeta>(prev_record_meta->next);
+  auto prev_record_meta = this->get_arribute<RecordMeta>(prev_record_address);
+  auto mid_record_meta = this->get_arribute<RecordMeta>(mid_record_address);
 
   auto mid_key = this->View(prev_record_meta->next + sizeof(RecordMeta),
                             mid_record_meta->key_len);
@@ -383,11 +385,17 @@ pair<string, Page> Page::SplitPage() {
       prev_record_meta->next + sizeof(RecordMeta) + mid_record_meta->key_len,
       mid_record_meta->val_len);
 
+  // uint16_t record_address = meta_->page_type == kInternalPage
+  //                               ? mid_record_meta->next
+  //                               : prev_record_meta->next;
+  uint16_t record_address = mid_record_meta->next;
+
+  if (meta_->page_type == kLeafPage) {
+    prev_record_meta = mid_record_meta;
+  }
+
   uint16_t new_page_begin_record_address = prev_record_meta->next;
 
-  uint16_t record_address = meta_->page_type == kInternalPage
-                                ? mid_record_meta->next
-                                : prev_record_meta->next;
   uint16_t end_address =
       meta_->page_type == kInternalPage ? 0 : this->slot(meta_->slots - 1);
 
@@ -411,7 +419,7 @@ pair<string, Page> Page::SplitPage() {
   uint16_t *page_slots = new uint16_t[meta_->slots];
   memcpy(page_slots, base_address_ + this->slot_offset(0), slot_size);
   meta_->slots = rest_slots;
-  meta_->node_size = half;
+  meta_->node_size = half + (meta_->page_type == PageType::kLeafPage);
   // meta_->free_size += page.meta()->size - meta_->free_size;
   memcpy(base_address_ + this->slot_offset(0), page_slots, slot_size);
 

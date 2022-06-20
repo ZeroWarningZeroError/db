@@ -48,7 +48,7 @@ void Search(BPlusTreeIndex &index, string_view key) {
 int main() {
   BPlusTreeIndex index("t1.index", cmp);
 
-  for (int i = 1000; i < 1010; i++) {
+  for (int i = 1000; i < 1020; i++) {
     auto code = index.Insert("key" + to_string(i), "val" + to_string(i));
   }
 
@@ -60,12 +60,11 @@ int main() {
   Search(index, "key2222222");
   Search(index, "key0000");
 
-  index.Erase("key1000");
-  index.BFS();
-  index.Erase("key1001");
-  index.BFS();
-  index.Erase("key1002");
-  index.BFS();
+  for (int i = 1000; i < 1003; i++) {
+    auto code = index.Erase("key" + to_string(i));
+    index.BFS();
+  }
+  index.Erase("key1003");
 
   return 0;
 }
