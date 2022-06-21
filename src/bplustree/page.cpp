@@ -221,6 +221,8 @@ ResultCode Page::AppendPage(Page &page, const Compare &compare) {
   this->TidyPage();
   // cout << "TidyPage" << endl;
 
+  // scan_use();
+
   // 获取最后一条有效记录地址
   uint16_t prev_record_address = this->LocateLastRecord();
   cout << prev_record_address << endl;
@@ -313,7 +315,10 @@ ResultCode Page::Erase(string_view key, const Compare &compare) {
 
   // 调整目录
   if (cur->owned && prev->owned) {
-    this->EraseSlot(hit_slot);
+    // todo 检验逻辑
+    if (hit_slot != meta_->slots - 1) {
+      this->EraseSlot(hit_slot);
+    }
   } else {
     if (cur->owned) {
       own_header = prev;
@@ -406,15 +411,20 @@ pair<string, Page> Page::SplitPage() {
   uint16_t rest_slots = prev_record_meta->slot_no + 1;
   auto cur_record_meta =
       this->get_arribute<RecordMeta>(this->slot(prev_record_meta->slot_no - 1));
+
   int owned = 0;
+
   while (cur_record_meta->next != new_page_begin_record_address) {
+    // cout << (cur_record_meta->next) << endl;
     owned++;
     cur_record_meta = this->get_arribute<RecordMeta>(cur_record_meta->next);
   }
+
   prev_record_meta->next = this->slot(meta_->slots - 1);
 
   this->get_arribute<RecordMeta>(this->slot(meta_->slots - 1))->owned =
       owned + 1;
+
   size_t slot_size = sizeof(uint16_t) * (rest_slots - 1);
   uint16_t *page_slots = new uint16_t[meta_->slots];
   memcpy(page_slots, base_address_ + this->slot_offset(0), slot_size);
@@ -965,14 +975,15 @@ uint16_t Page::LocateRecord(uint16_t record_no) noexcept {
   RecordMeta *prev_record_meta = this->get_arribute<RecordMeta>(this->slot(0));
 
   while (slot_no < meta_->slots) {
-    uint16_t slot_record_address = this->slot(slot_no++);
+    uint16_t slot_record_address = this->slot(slot_no);
     record_meta = this->get_arribute<RecordMeta>(slot_record_address);
-    if (num + record_meta->owned >= record_no) {
+    if (num + record_meta->owned > record_no) {
       record_meta = prev_record_meta;
       break;
     }
     num = num + record_meta->owned;
     prev_record_meta = record_meta;
+    slot_no++;
   }
 
   uint16_t record_address = 0;
@@ -987,8 +998,10 @@ uint16_t Page::LocateRecord(uint16_t record_no) noexcept {
 
   if (record_address) {
     record_meta = this->get_arribute<RecordMeta>(record_address);
-    record_meta->slot_no = slot_no - 1;
+    record_meta->slot_no = slot_no;
   }
+
+  // cout << *record_meta << endl;
 
   return record_address;
 }

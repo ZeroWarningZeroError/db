@@ -242,7 +242,7 @@ ResultCode BPlusTreeIndex::Erase(PageType page_type, address_t page_address,
   file_->write(meta->self, page.base_address(), PAGE_SIZE);
 
   if (meta->node_size == 0) {
-    page.scan_use();
+    // page.scan_use();
     Page parent(kInternalPage);
     file_->read(meta->parent, parent.base_address(), PAGE_SIZE);
     auto parent_need_erase_key =
@@ -255,8 +255,8 @@ ResultCode BPlusTreeIndex::Erase(PageType page_type, address_t page_address,
   uint16_t data_size =
       meta->size - Page::VIRTUAL_MIN_RECORD_SIZE - sizeof(PageMeta);
 
-  cout << "free_size=" << meta->free_size << ",data_size=" << data_size
-       << ",factor=" << (meta->free_size * 1.0 / data_size) << endl;
+  // cout << "free_size=" << meta->free_size << ",data_size=" << data_size
+  //      << ",factor=" << (meta->free_size * 1.0 / data_size) << endl;
   if (meta->free_size * 1.0 / data_size >= 0.8) {
     Page sibling_page(page_type);
     Page parent(kInternalPage);
@@ -285,10 +285,6 @@ ResultCode BPlusTreeIndex::EraseParentAndMergeSibling(
   file_->read(left_child_address, left_child.base_address(), PAGE_SIZE);
   file_->read(right_child_address, right_child.base_address(), PAGE_SIZE);
 
-  cout << "left_child_address=" << left_child_address << ",free_size"
-       << left_child.meta()->free_size << endl;
-  cout << "right_child_address=" << right_child_address << ",data_size"
-       << right_child.ValidDataSize() << endl;
   if (left_child.meta()->free_size < right_child.ValidDataSize()) {
     return ResultCode::ERROR_NOT_MATCH_CONSTRAINT;
   }
@@ -297,11 +293,8 @@ ResultCode BPlusTreeIndex::EraseParentAndMergeSibling(
     return ResultCode::ERROR_NOT_MATCH_CONSTRAINT;
   }
 
-  left_child.scan_use();
-
   file_->read(left_child.meta()->parent, parent.base_address(), PAGE_SIZE);
 
-  // auto first_key_iter = right_child.Iterator().Next();
   auto last_key_iter = left_child.GetLastIterator();
 
   auto parent_key_address = parent.LowerBound(last_key_iter->key, comparator_);
@@ -313,7 +306,9 @@ ResultCode BPlusTreeIndex::EraseParentAndMergeSibling(
   }
 
   left_child.AppendPage(right_child, comparator_);
+
   left_child.meta()->self = right_child.meta()->self;
+  left_child.meta()->next = right_child.meta()->next;
 
   file_->write(left_child.meta()->self, left_child.base_address(), PAGE_SIZE);
   return this->Erase(PageType::kInternalPage, left_child.meta()->parent,
@@ -365,9 +360,7 @@ void BPlusTreeIndex::BFS() {
       for (int j = 0; j < d; j++) {
         cout << "\t";
       }
-      // cout << q.front() << endl;
       Page page(kInternalPage);
-      // cout << q.front() << " ";
       file_->read(q.front(), page.base_address(), PAGE_SIZE);
       q.pop();
       auto use = page.get_arribute<RecordMeta>(page.meta()->use);
@@ -400,8 +393,5 @@ void BPlusTreeIndex::BFS() {
       cout << "]" << endl;
     }
     d++;
-    // if (d == 3) {
-    //   return;
-    // }
   }
 }

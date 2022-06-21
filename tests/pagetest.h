@@ -110,11 +110,13 @@ TEST_F(PageTest, testInsertAndErase) {
 TEST_F(PageTest, testSplitLeafPage) {
   auto [mid_key, other_page] = page_->SplitPage();
 
-  int half = node_size_ / 2;
+  page_->scan_use();
+
+  int half = node_size_ / 2 + 1;
   int other_size = node_size_ - half;
   ASSERT_EQ(half, page_->meta()->node_size);
   ASSERT_EQ(other_size, other_page.meta()->node_size);
-  ASSERT_EQ("key" + to_string(10000 + half), mid_key);
+  ASSERT_EQ("key" + to_string(10000 + half - 1), mid_key);
 }
 
 TEST_F(PageTest, testSplitInternalPage) {

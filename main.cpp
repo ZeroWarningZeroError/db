@@ -60,11 +60,11 @@ int main() {
   Search(index, "key2222222");
   Search(index, "key0000");
 
-  for (int i = 1000; i < 1003; i++) {
-    auto code = index.Erase("key" + to_string(i));
+  for (int i = 1000; i < 1002; i++) {
+    for (int j = i; j < 1020; j += 3) {
+      auto code = index.Erase("key" + to_string(j));
+    }
     index.BFS();
   }
-  index.Erase("key1003");
-
   return 0;
 }
