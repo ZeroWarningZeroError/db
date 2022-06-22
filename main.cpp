@@ -6,6 +6,7 @@
 
 #include "bplustree.h"
 #include "bplustree/page.h"
+#include "buffer/Replacer.h"
 #include "file.h"
 #include "fmt/format.h"
 #include "memory/buffer.h"

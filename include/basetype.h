@@ -25,5 +25,9 @@ concept Comparator = requires(Type& comparator, string_view& lhs,
 
 using address_t = int64_t;
 using page_id_t = int64_t;
+using table_id_t = int64_t;
+using frame_id_t = int64_t;
 
-#define PAGE_SIZE (16 * 20)
+#ifndef PAGE_SIZE
+#define PAGE_SIZE (16 * 1024)
+#endif

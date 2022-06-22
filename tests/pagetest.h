@@ -5,6 +5,8 @@
 #include <iostream>
 #include <string>
 
+#define PAGE_SIZE (16 * 1024)
+
 #include "base.h"
 #include "bplustree/page.h"
 #include "memory/buffer.h"
@@ -109,8 +111,6 @@ TEST_F(PageTest, testInsertAndErase) {
 
 TEST_F(PageTest, testSplitLeafPage) {
   auto [mid_key, other_page] = page_->SplitPage();
-
-  page_->scan_use();
 
   int half = node_size_ / 2 + 1;
   int other_size = node_size_ - half;
