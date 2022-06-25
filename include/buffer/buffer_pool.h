@@ -8,17 +8,13 @@
 
 #include "basetype.h"
 #include "frame.h"
+#include "io/SpaceManager.h"
 
 using std::equal_to;
 using std::hash;
 using std::list;
 using std::unordered_map;
 using std::vector;
-
-struct PagePosition {
-  table_id_t table_id;
-  address_t page_address;
-};
 
 namespace std {
 template <>
@@ -36,6 +32,8 @@ struct equal_to<PagePosition> {
   }
 };
 };  // namespace std
+
+class ISpaceManager;
 
 class IBufferPool {
  public:
@@ -68,13 +66,14 @@ class LRUBufferPool : public IBufferPool {
 
  private:
   optional<frame_id_t> GetFreeFrame();
+  Frame* NewEmptyFrame(frame_id_t frame_id);
 
  private:
   size_t capacity_;
   IReplacer* replacer;
+  ISpaceManager* space_manager_;
   list<frame_id_t> frees_;
   vector<Frame*> frames_;
-  unordered_map<frame_id_t, PagePosition> page_positions_;
   unordered_map<PagePosition, frame_id_t> frame_ids_;
 };
 

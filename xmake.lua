@@ -9,6 +9,7 @@ target("0327")
     set_kind("binary")
     add_files("src/*.cpp")
     add_files("src/bplustree/*.cpp")
+    add_files("src/io/*.cpp")
     add_packages("fmt")
     add_includedirs("include")
 

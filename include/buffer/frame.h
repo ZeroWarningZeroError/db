@@ -5,13 +5,19 @@
 
 using std::hash;
 
-using frame_id_t = int64_t;
+struct PagePosition {
+  space_t space;
+  address_t page_address;
+};
 
 struct Frame {
+  PagePosition page_position;
   frame_id_t id;
-  int pin_count;
-  bool is_dirty;
+  space_t space;
+  address_t page_address;
+  uint64_t pin_count;
   char* buffer;
+  bool is_dirty;
 };
 
 namespace std {

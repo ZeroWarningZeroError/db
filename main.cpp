@@ -9,6 +9,7 @@
 #include "buffer/Replacer.h"
 #include "file.h"
 #include "fmt/format.h"
+#include "io/TableSpaceDiskManager.h"
 #include "memory/buffer.h"
 #include "serialize.h"
 
@@ -47,25 +48,44 @@ void Search(BPlusTreeIndex &index, string_view key) {
 }
 
 int main() {
-  BPlusTreeIndex index("t1.index", cmp);
+  TableSpaceDiskManager *diskManager = TableSpaceDiskManager::instance();
+  char *buffer = new char[PAGE_SIZE];
 
-  for (int i = 1000; i < 1020; i++) {
-    auto code = index.Insert("key" + to_string(i), "val" + to_string(i));
+  for (int i = 0; i < PAGE_SIZE; i++) {
+    buffer[i] = 'a' + (i % 26);
   }
 
-  index.BFS();
+  diskManager->write("data.index", 0, buffer, PAGE_SIZE);
 
-  Search(index, "key1000");
-  Search(index, "key1010");
-  Search(index, "key1017");
-  Search(index, "key2222222");
-  Search(index, "key0000");
+  char *buffer2 = new char[PAGE_SIZE];
 
-  for (int i = 1000; i < 1002; i++) {
-    for (int j = i; j < 1020; j += 3) {
-      auto code = index.Erase("key" + to_string(j));
+  diskManager->read("data.index", 0, buffer2, PAGE_SIZE);
+
+  for (int i = 0; i < PAGE_SIZE; i++) {
+    if (buffer2[i] != buffer[i]) {
+      cout << buffer2[i] << endl;
     }
-    index.BFS();
   }
-  return 0;
+
+  // BPlusTreeIndex index("t1.index", cmp);
+
+  // for (int i = 1000; i < 1020; i++) {
+  //   auto code = index.Insert("key" + to_string(i), "val" + to_string(i));
+  // }
+
+  // index.BFS();
+
+  // Search(index, "key1000");
+  // Search(index, "key1010");
+  // Search(index, "key1017");
+  // Search(index, "key2222222");
+  // Search(index, "key0000");
+
+  // for (int i = 1000; i < 1002; i++) {
+  //   for (int j = i; j < 1020; j += 3) {
+  //     auto code = index.Erase("key" + to_string(j));
+  //   }
+  //   index.BFS();
+  // }
+  // return 0;
 }
