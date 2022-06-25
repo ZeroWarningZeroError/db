@@ -1,8 +1,8 @@
-#include "buffer_pool.h"
+#include "buffer/buffer_pool.h"
 
-#include "SpaceManager.h"
-#include "TableSpaceDiskManager.h"
-#include "replacer.h"
+#include "buffer/replacer.h"
+#include "io/SpaceManager.h"
+#include "io/TableSpaceDiskManager.h"
 
 LRUBufferPool::LRUBufferPool(size_t capacity) : capacity_(capacity) {
   replacer = new LRUReplacer(capacity_);
@@ -16,10 +16,10 @@ LRUBufferPool::LRUBufferPool(size_t capacity) : capacity_(capacity) {
 
 Frame* LRUBufferPool::FetchPage(PagePosition page_position) {
   if (frame_ids_.count(page_position)) {
-    frame_id_t frame_id = frame_ids_[page_position];
+    auto frame_id = frame_ids_[page_position];
     auto frame = frames_[frame_id];
-    replacer->Pin(frame_id);
     frame->pin_count++;
+    replacer->Pin(frame_id);
     return frame;
   }
 
@@ -31,11 +31,18 @@ Frame* LRUBufferPool::FetchPage(PagePosition page_position) {
   frame_id_t frame_id = result.value();
   auto frame = frames_[frame_id];
 
-  frames_.erase(frame->page_position);
-  frames_[page_position] = page_position;
+  if (frame->is_dirty) {
+    space_manager_->write(frame->page_position.space,
+                          frame->page_position.page_address, frame->buffer,
+                          PAGE_SIZE);
+  }
 
-  frame->dirty = false;
+  frame_ids_.erase(frame->page_position);
+  frame_ids_[page_position] = frame_id;
+
+  frame->is_dirty = false;
   frame->pin_count = 1;
+  frame->page_position = page_position;
 
   space_manager_->read(page_position.space, page_position.page_address,
                        frame->buffer, PAGE_SIZE);
@@ -44,13 +51,13 @@ Frame* LRUBufferPool::FetchPage(PagePosition page_position) {
 }
 
 void LRUBufferPool::UnPinPage(PagePosition page_position) {
-  if (frame_ids_.count(page_positions) == 0) {
+  if (frame_ids_.count(page_position) == 0) {
     return;
   }
   auto frame = frames_[frame_ids_[page_position]];
   frame->pin_count--;
   if (frame->pin_count <= 0) {
-    replacer->UnPin(frame->id);
+    replacer->Unpin(frame->id);
   }
 }
 
@@ -59,45 +66,30 @@ bool LRUBufferPool::FlushPage(PagePosition page_position) {
     return false;
   }
   auto frame_id = frame_ids_[page_position];
-  auto frame = &frames_[frame_id];
+  auto frame = frames_[frame_id];
 
-  // 回刷
-  space_manager_->write(page_position.space, page_position.page_address,
-                        frame.buffer, PAGE_SIZE);
+  if (frame->is_dirty) {
+    space_manager_->write(page_position.space, page_position.page_address,
+                          frame->buffer, PAGE_SIZE);
+  }
 
   return true;
 }
 
-virtual Frame* LRUBufferPool::DeletePage(PagePosition page_position) {}
+// virtual Frame* LRUBufferPool::DeletePage(PagePosition page_position) {
+//   if (frame_ids_.count(page_position) == 0) {
+//     return;
+//   }
+// }
 
-virtual void LRUBufferPool::FlushAllPage() {}
-
-Frame* LRUBufferPool::NewPage(PagePosition page_position) {
-  if (frame_ids_.count(page_position)) {
-    return frame_ids_[page_position];
+void LRUBufferPool::FlushAllPage() {
+  for (int i = 0; i < capacity_; i++) {
+    if (frames_[i]->is_dirty) {
+      auto page_position = frames_[i]->page_position;
+      space_manager_->write(page_position.space, page_position.page_address,
+                            frames_[i]->buffer, PAGE_SIZE);
+    }
   }
-
-  auto result = this->GetFreeFrame();
-  if (!result) {
-    return nullptr;
-  }
-
-  frame_id_t frame_id = result.value();
-
-  auto frame = &frames_[frame_id];
-  if (frame->is_dirty) {
-    space_manager_->write(page_position.space, page_position.page_address,
-                          frame.buffer, PAGE_SIZE);
-  }
-
-  frame_ids_.erase(frame->page_position);
-  frame_ids_[page_position] = frame_id;
-  frame->page_position = page_position;
-
-  space_manager_->read(page_position.space, page_position.page_address,
-                       frame.buffer, PAGE_SIZE);
-
-  return frame;
 }
 
 optional<frame_id_t> LRUBufferPool::GetFreeFrame() {

@@ -3,50 +3,33 @@
 #define BUFFER_POOL_MANAGER
 
 #include <list>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
 #include "basetype.h"
 #include "frame.h"
-#include "io/SpaceManager.h"
 
 using std::equal_to;
 using std::hash;
 using std::list;
+using std::optional;
 using std::unordered_map;
 using std::vector;
-
-namespace std {
-template <>
-struct hash<PagePosition> {
-  size_t operator()(const PagePosition& page_position) const {
-    return hash<table_id_t>()(page_position.table_id) << 32 |
-           hash<address_t>()(page_position.page_address);
-  }
-};
-
-template <>
-struct equal_to<PagePosition> {
-  bool operator()(const PagePosition& lhs, const PagePosition& rhs) const {
-    return lhs.table_id == rhs.table_id && lhs.page_address == rhs.page_address;
-  }
-};
-};  // namespace std
 
 class ISpaceManager;
 
 class IBufferPool {
  public:
-  virtual Frame* FetchPage(PagePosition page_position);
-  virtual void PinPage(PagePosition page_position);
-  virtual void UnPinPage(PagePosition page_position);
-  virtual void FlushPage(PagePosition page_position);
-  virtual Frame* NewPage(PagePosition page_position);
-  virtual void DeletePage(PagePosition page_position);
-  virtual void FlushAllPage();
+  virtual Frame* FetchPage(PagePosition page_position) = 0;
+  virtual void UnPinPage(PagePosition page_position) = 0;
+  virtual bool FlushPage(PagePosition page_position) = 0;
+  // virtual void DeletePage(PagePosition page_position);
+  virtual void FlushAllPage() = 0;
 };
 
 class IReplacer;
+class ISpaceManager;
 
 class LRUBufferPool : public IBufferPool {
  public:
@@ -57,11 +40,9 @@ class LRUBufferPool : public IBufferPool {
 
  public:
   virtual Frame* FetchPage(PagePosition page_position) override;
-  virtual void PinPage(PagePosition page_position) override;
   virtual void UnPinPage(PagePosition page_position) override;
-  virtual void FlushPage(PagePosition page_position) override;
-  virtual Frame* NewPage(PagePosition page_position) override;
-  virtual void DeletePage(PagePosition page_position) override;
+  virtual bool FlushPage(PagePosition page_position) override;
+  // virtual void DeletePage(PagePosition page_position) override;
   virtual void FlushAllPage();
 
  private:

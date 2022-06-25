@@ -1,4 +1,4 @@
-#include "pagetest.h"
+#include "lru_replacer_test.h"
 
 int main() {
   testing::InitGoogleTest();

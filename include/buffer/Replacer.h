@@ -6,6 +6,7 @@
 #include <optional>
 #include <unordered_map>
 
+#include "basetype.h"
 #include "frame.h"
 
 using std::lock_guard;
@@ -16,29 +17,32 @@ using std::unordered_map;
 class IReplacer {
  public:
   virtual optional<frame_id_t> Victim() = 0;
-  virtual void Pin(frame_id_t frame_id);
-  virtual void Unpin(frame_id_t frame_id);
-  virtual size_t Size();
+  virtual void Pin(frame_id_t frame_id) = 0;
+  virtual void Unpin(frame_id_t frame_id) = 0;
+  virtual size_t size() = 0;
+  virtual void scan() = 0;
 };
 
 template <typename T>
 struct LRUNode {
-  LRUNode *next;
-  LRUNode *prev;
+  LRUNode<T> *next;
+  LRUNode<T> *prev;
   T data;
 };
 
 class LRUReplacer : public IReplacer {
  public:
-  LRUReplacer(int size);
+  LRUReplacer(size_t size);
   LRUReplacer(const LRUReplacer &other) = delete;
   LRUReplacer(const LRUReplacer &&other) = delete;
+  virtual ~LRUReplacer();
 
  public:
   virtual optional<frame_id_t> Victim() override;
   virtual void Pin(frame_id_t frame_id) override;
   virtual void Unpin(frame_id_t frame_id) override;
-  virtual size_t Size() override;
+  virtual size_t size() override;
+  virtual void scan() override;
 
  private:
   size_t size_;

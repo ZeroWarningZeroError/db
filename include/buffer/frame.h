@@ -29,4 +29,21 @@ struct hash<Frame> {
 };
 }  // namespace  std
 
+namespace std {
+template <>
+struct hash<PagePosition> {
+  size_t operator()(const PagePosition& page_position) const {
+    return hash<space_t>()(page_position.space) << 32 |
+           hash<address_t>()(page_position.page_address);
+  }
+};
+
+template <>
+struct equal_to<PagePosition> {
+  bool operator()(const PagePosition& lhs, const PagePosition& rhs) const {
+    return lhs.space == rhs.space && lhs.page_address == rhs.page_address;
+  }
+};
+};  // namespace std
+
 #endif
