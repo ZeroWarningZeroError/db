@@ -4,7 +4,7 @@
 #include <iostream>
 #include <queue>
 
-#include "bplustree/page.h"
+#include "bplustree/bplustree_page.h"
 #include "serialize.h"
 
 using std::cout;

@@ -1,8 +1,14 @@
 #include "buffer/buffer_pool.h"
 
+#include <iostream>
+
 #include "buffer/replacer.h"
 #include "io/SpaceManager.h"
 #include "io/TableSpaceDiskManager.h"
+
+using std::cout;
+using std::endl;
+using std::lock_guard;
 
 LRUBufferPool::LRUBufferPool(size_t capacity) : capacity_(capacity) {
   replacer = new LRUReplacer(capacity_);
@@ -14,7 +20,17 @@ LRUBufferPool::LRUBufferPool(size_t capacity) : capacity_(capacity) {
   }
 }
 
+LRUBufferPool::~LRUBufferPool() {
+  this->FlushAllPage();
+  for (int i = 0; i < capacity_; i++) {
+    delete frames_[i]->buffer;
+    delete frames_[i];
+  }
+  delete replacer;
+}
+
 Frame* LRUBufferPool::FetchPage(PagePosition page_position) {
+  lock_guard<mutex> guard(pool_lock_);
   if (frame_ids_.count(page_position)) {
     auto frame_id = frame_ids_[page_position];
     auto frame = frames_[frame_id];
@@ -24,7 +40,7 @@ Frame* LRUBufferPool::FetchPage(PagePosition page_position) {
   }
 
   auto result = this->GetFreeFrame();
-  if (result) {
+  if (!result.has_value()) {
     return nullptr;
   }
 
@@ -51,6 +67,8 @@ Frame* LRUBufferPool::FetchPage(PagePosition page_position) {
 }
 
 void LRUBufferPool::UnPinPage(PagePosition page_position) {
+  lock_guard<mutex> guard(pool_lock_);
+
   if (frame_ids_.count(page_position) == 0) {
     return;
   }
@@ -62,7 +80,10 @@ void LRUBufferPool::UnPinPage(PagePosition page_position) {
 }
 
 bool LRUBufferPool::FlushPage(PagePosition page_position) {
-  if (frame_ids_.count(page_position)) {
+  lock_guard<mutex> guard(pool_lock_);
+
+  if (frame_ids_.count(page_position) == 0) {
+    cout << "false" << endl;
     return false;
   }
   auto frame_id = frame_ids_[page_position];
@@ -71,18 +92,15 @@ bool LRUBufferPool::FlushPage(PagePosition page_position) {
   if (frame->is_dirty) {
     space_manager_->write(page_position.space, page_position.page_address,
                           frame->buffer, PAGE_SIZE);
+    frame->is_dirty = false;
   }
 
   return true;
 }
 
-// virtual Frame* LRUBufferPool::DeletePage(PagePosition page_position) {
-//   if (frame_ids_.count(page_position) == 0) {
-//     return;
-//   }
-// }
-
 void LRUBufferPool::FlushAllPage() {
+  lock_guard<mutex> guard(pool_lock_);
+
   for (int i = 0; i < capacity_; i++) {
     if (frames_[i]->is_dirty) {
       auto page_position = frames_[i]->page_position;
@@ -105,8 +123,9 @@ Frame* LRUBufferPool::NewEmptyFrame(frame_id_t frame_id) {
   Frame* frame = new Frame();
   frame->id = frame_id;
   frame->is_dirty = false;
-  frame->page_position = {0, 0};
   frame->pin_count = 0;
   frame->buffer = new char[PAGE_SIZE];
+  frame->frame_size = PAGE_SIZE;
+  memset(frame->buffer, 0, PAGE_SIZE);
   return frame;
 }

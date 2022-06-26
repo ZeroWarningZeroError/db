@@ -113,6 +113,12 @@ class File {
    */
   void append(const char *data, int len);
 
+  /**
+   * @brief 文件大小
+   *
+   */
+  int64_t size();
+
  private:
   size_t last_pos();
 

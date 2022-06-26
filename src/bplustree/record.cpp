@@ -4,7 +4,7 @@
 
 #include <cstring>
 
-#include "bplustree/page.h"
+#include "bplustree/bplustree_page.h"
 
 ostream &operator<<(ostream &os, const RecordMeta &meta) {
   return os << fmt::format(

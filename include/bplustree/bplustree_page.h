@@ -14,6 +14,8 @@
 #include "base.h"
 #include "basetype.h"
 #include "bplustree/record.h"
+#include "buffer/buffer_pool.h"
+#include "buffer/extend_frame.h"
 #include "code.h"
 #include "memory/buffer.h"
 
@@ -79,7 +81,7 @@ enum class PageCode {
  */
 class Page {
  public:
-  Page(PageType page_type);
+  Page(PageType page_type, bool isLoad = false, char *buffer = nullptr);
 
  public:
   /**

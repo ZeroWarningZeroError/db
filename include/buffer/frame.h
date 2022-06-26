@@ -16,6 +16,7 @@ struct Frame {
   space_t space;
   address_t page_address;
   uint64_t pin_count;
+  uint64_t frame_size;
   char* buffer;
   bool is_dirty;
 };

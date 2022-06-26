@@ -1,6 +1,11 @@
+#include "file.h"
+
+#include <sys/stat.h>
+
+#include <algorithm>
 #include <filesystem>
 
-#include "file.h"
+using std::min;
 
 bool File::exist(const std::string &file_path) {
   return std::filesystem::exists(file_path);
@@ -25,8 +30,21 @@ bool File::is_open() const { return handle_.is_open(); }
 
 void File::read(size_t pos, char *buffer, size_t size) {
   lock_guard guard(_file_lock);
+  auto max_offset = this->size();
+  if (max_offset <= pos) {
+    cout << this->db_file_name_ << " read:max_offset=" << max_offset
+         << ",pos=" << pos << endl;
+    return;
+  }
+  auto real_size = min(max_offset - pos, size);
+  if (real_size <= 0) {
+    return;
+  }
   handle_.seekg(pos);
-  handle_.read(buffer, size);
+  handle_.read(buffer, real_size);
+  if (handle_.bad()) {
+    cout << this->db_file_name_ << "read:error" << endl;
+  }
 }
 
 size_t File::alloc(const size_t size) {
@@ -44,6 +62,7 @@ size_t File::last_pos() {
 
 void File::write(size_t pos, const char *data, size_t len) {
   lock_guard guard(_file_lock);
+  cout << pos << endl;
   handle_.seekp(pos);
   handle_.write(data, len);
 }
@@ -51,6 +70,14 @@ void File::write(size_t pos, const char *data, size_t len) {
 void File::append(const char *data, int len) {
   handle_.seekp(0, std::ios::end);
   handle_.write(data, len);
+}
+
+int64_t File::size() {
+  struct stat buf;
+  if (stat(db_file_name_.c_str(), &buf) == 0) {
+    return buf.st_size;
+  }
+  return -1;
 }
 
 File::~File() {

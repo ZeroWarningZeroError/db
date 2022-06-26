@@ -1,4 +1,4 @@
-#include "bplustree/page.h"
+#include "bplustree/bplustree_page.h"
 
 #include <fmt/format.h>
 
@@ -43,13 +43,28 @@ ostream &operator<<(ostream &os, const PageMeta &meta) {
 uint16_t Page::VIRTUAL_MIN_RECORD_SIZE =
     sizeof(RecordMeta) + 3 + sizeof(RecordMeta) + 3 + 8;
 
-Page::Page(PageType page_type) {
+Page::Page(PageType page_type, bool isLoad, char *buffer) {
   // 这种方式存疑
-  char *raw_buffer = new char[PAGE_SIZE];
+  char *raw_buffer = buffer;
+  if (raw_buffer == nullptr) {
+    raw_buffer = new char[PAGE_SIZE];
+  }
   memset(raw_buffer, 0, PAGE_SIZE);
   page_data_.reset(raw_buffer);
 
+  // 设置虚拟记录
+  string virtual_min_key = "min";
+  string virtual_max_key = "max";
+
+  virtual_min_record_address_ = sizeof(PageMeta);
+  virtual_max_record_address_ =
+      sizeof(PageMeta) + sizeof(RecordMeta) + virtual_min_key.size();
+
   meta_ = reinterpret_cast<PageMeta *>(page_data_.get());
+
+  if (isLoad) {
+    return;
+  }
   // 设置基本属性
   meta_->slots = 2;
   meta_->size = PAGE_SIZE;
@@ -58,13 +73,6 @@ Page::Page(PageType page_type) {
   meta_->parent_key_offset = 0;
 
   base_address_ = page_data_.get();
-  // 设置虚拟记录
-  string virtual_min_key = "min";
-  string virtual_max_key = "max";
-
-  virtual_min_record_address_ = sizeof(PageMeta);
-  virtual_max_record_address_ =
-      sizeof(PageMeta) + sizeof(RecordMeta) + virtual_min_key.size();
 
   RecordMeta min_record_meta = {.next = virtual_max_record_address_,
                                 .owned = 1,

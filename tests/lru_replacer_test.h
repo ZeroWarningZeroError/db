@@ -8,7 +8,7 @@ class LRUReplacerTest : public ::testing::Test {
     capacity_ = 10;
     replacer_ = new LRUReplacer(10);
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < capacity_; i++) {
       replacer_->Unpin(i);
     }
   }
@@ -20,7 +20,9 @@ class LRUReplacerTest : public ::testing::Test {
 };
 
 TEST_F(LRUReplacerTest, testEvict) {
-  optional<frame_id_t> result = replacer_->Victim();
-  ASSERT_EQ(true, result.has_value());
-  ASSERT_EQ(4, result.value());
+  for (int i = 0; i < capacity_; i++) {
+    optional<frame_id_t> result = replacer_->Victim();
+    ASSERT_EQ(true, result.has_value());
+    ASSERT_EQ(i, result.value());
+  }
 }

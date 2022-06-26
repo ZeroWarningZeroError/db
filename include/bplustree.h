@@ -7,7 +7,7 @@
 #include <string_view>
 
 #include "basetype.h"
-#include "bplustree/page.h"
+#include "bplustree/bplustree_page.h"
 #include "code.h"
 #include "file.h"
 
