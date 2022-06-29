@@ -1,3 +1,4 @@
+#include <spdlog/spdlog.h>
 #include <sys/stat.h>
 
 #include <ctime>
@@ -10,6 +11,7 @@
 #include "bplustree/bplustree_page.h"
 #include "buffer/Replacer.h"
 #include "buffer/buffer_pool.h"
+#include "buffer/extend_frame.h"
 #include "file.h"
 #include "fmt/format.h"
 #include "io/TableSpaceDiskManager.h"
@@ -28,23 +30,45 @@ auto cmp = [](string_view v1, string_view v2) -> int {
   return v1 < v2 ? 1 : -1;
 };
 
+template <>
+struct FrameConstructor<Page> {
+  template <typename... Args>
+  static Page* Construct(Frame* frame, Args... args) {
+    Page* page = new Page{args..., frame->buffer};
+    return page;
+  }
+};
+
+template <>
+struct FrameDeconstructor<Page> {
+  static void Deconstruct(Page* data) { return; }
+};
+
+struct PageMarker {
+  static LocalAutoReleaseFrameData<Page> NewLocalBPlusTreePage(
+      IBufferPool* pool, PageType page_type, PagePosition position) {
+    return {pool, position, page_type, false};
+  }
+
+  static LocalAutoReleaseFrameData<Page> LoadLocalBPlustTreePage(
+      IBufferPool* pool, PagePosition position) {
+    return {pool, position, PageType::kLeafPage, true};
+  }
+};
+
 int main() {
   IBufferPool* pool = new LRUBufferPool(10);
-  Frame* frame = pool->FetchPage({"t1.index", 10});
-  for (int i = 0; i < frame->frame_size; i++) {
-    cout << frame->buffer[i];
-  }
-  cout << endl;
+  auto data =
+      PageMarker::NewLocalBPlusTreePage(pool, kLeafPage, {"data.index", 0});
 
-  for (int i = 0; i < frame->frame_size; i++) {
-    frame->buffer[i] = 'a' + (i % 26);
-  }
+  data->Insert("key0001", {"val0001"}, cmp);
+  data->Insert("key0002", {"val0002"}, cmp);
+  data->Insert("key0003", {"val0003"}, cmp);
+  data->Insert("key0004", {"val0004"}, cmp);
 
-  frame->is_dirty = true;
+  data->scan_use();
 
-  pool->FlushPage(frame->page_position);
-  pool->UnPinPage(frame->page_position);
+  spdlog::info("scan_use");
 
   delete pool;
-  return 0;
 }
