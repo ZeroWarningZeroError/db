@@ -1,13 +1,21 @@
 #ifndef FRAME_H
 #define FRAME_H
 
+#include <fmt/ostream.h>
+
+#include <iostream>
 #include <type_traits>
 
 using std::hash;
+using std::ostream;
 
 struct PagePosition {
   space_t space;
   address_t page_address;
+  friend ostream& operator<<(ostream& os, const PagePosition& position) {
+    return os << "{space=" << position.space << ", "
+              << "address=" << position.page_address << "}";
+  }
 };
 
 struct Frame {

@@ -15,6 +15,7 @@
 #include "basetype.h"
 #include "bplustree/record.h"
 #include "buffer/buffer_pool.h"
+#include "buffer/construct.h"
 #include "buffer/extend_frame.h"
 #include "code.h"
 #include "memory/buffer.h"
@@ -345,6 +346,7 @@ class Page {
   char *base_address_;
 
   shared_ptr<char> page_data_;
+  shared_ptr<char> page_data_guard_;
 
   uint16_t virtual_min_record_address_;
   uint16_t virtual_max_record_address_;
@@ -361,5 +363,21 @@ T *Page::get_arribute(uint16_t offset) {
   }
   return reinterpret_cast<T *>(base_address_ + offset);
 }
+
+template <>
+struct FrameConstructor<Page> {
+  template <typename... Args>
+  static Page *Construct(Frame *frame, Args &&... args) {
+    return new Page{std::forward<Args>(args)..., frame->buffer};
+  }
+};
+
+template <>
+struct FrameDeconstructor<Page> {
+  static void Deconstruct(Page *data) {
+    delete data;
+    return;
+  }
+};
 
 #endif

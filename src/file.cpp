@@ -1,5 +1,6 @@
 #include "file.h"
 
+#include <spdlog/spdlog.h>
 #include <sys/stat.h>
 
 #include <algorithm>
@@ -32,8 +33,8 @@ void File::read(size_t pos, char *buffer, size_t size) {
   lock_guard guard(_file_lock);
   auto max_offset = this->size();
   if (max_offset <= pos) {
-    cout << this->db_file_name_ << " read:max_offset=" << max_offset
-         << ",pos=" << pos << endl;
+    spdlog::error("{}: file={}, pos={}, size={}, maxoffset={}", __func__,
+                  this->db_file_name_, pos, size, max_offset);
     return;
   }
   auto real_size = min(max_offset - pos, size);
@@ -43,8 +44,12 @@ void File::read(size_t pos, char *buffer, size_t size) {
   handle_.seekg(pos);
   handle_.read(buffer, real_size);
   if (handle_.bad()) {
-    cout << this->db_file_name_ << "read:error" << endl;
+    spdlog::error("{}: file={}, pos={}, size={}, bad={}", __func__,
+                  this->db_file_name_, pos, size, handle_.bad());
+    return;
   }
+  spdlog::info("{}: file={}, pos={}, size={}", __func__, this->db_file_name_,
+               pos, size);
 }
 
 size_t File::alloc(const size_t size) {
@@ -62,9 +67,15 @@ size_t File::last_pos() {
 
 void File::write(size_t pos, const char *data, size_t len) {
   lock_guard guard(_file_lock);
-  cout << pos << endl;
   handle_.seekp(pos);
   handle_.write(data, len);
+  if (handle_.bad()) {
+    spdlog::error("{}: file={}, pos={}, size={}, bad={}", __func__,
+                  this->db_file_name_, pos, len, handle_.bad());
+    return;
+  }
+  spdlog::info("{}: file={}, pos={}, size={}", __func__, this->db_file_name_,
+               pos, len);
 }
 
 void File::append(const char *data, int len) {

@@ -44,13 +44,11 @@ uint16_t Page::VIRTUAL_MIN_RECORD_SIZE =
     sizeof(RecordMeta) + 3 + sizeof(RecordMeta) + 3 + 8;
 
 Page::Page(PageType page_type, bool isLoad, char *buffer) {
-  // 这种方式存疑
-  char *raw_buffer = buffer;
-  if (raw_buffer == nullptr) {
-    raw_buffer = new char[PAGE_SIZE];
+  base_address_ = buffer;
+  if (base_address_ == nullptr) {
+    page_data_guard_.reset(new char[PAGE_SIZE]);
+    base_address_ = page_data_guard_.get();
   }
-  memset(raw_buffer, 0, PAGE_SIZE);
-  page_data_.reset(raw_buffer);
 
   // 设置虚拟记录
   string virtual_min_key = "min";
@@ -60,7 +58,7 @@ Page::Page(PageType page_type, bool isLoad, char *buffer) {
   virtual_max_record_address_ =
       sizeof(PageMeta) + sizeof(RecordMeta) + virtual_min_key.size();
 
-  meta_ = reinterpret_cast<PageMeta *>(page_data_.get());
+  meta_ = reinterpret_cast<PageMeta *>(base_address_);
 
   if (isLoad) {
     return;
@@ -71,8 +69,6 @@ Page::Page(PageType page_type, bool isLoad, char *buffer) {
   meta_->use = sizeof(PageMeta);
   meta_->page_type = page_type;
   meta_->parent_key_offset = 0;
-
-  base_address_ = page_data_.get();
 
   RecordMeta min_record_meta = {.next = virtual_max_record_address_,
                                 .owned = 1,

@@ -12,6 +12,7 @@
 #include "buffer/Replacer.h"
 #include "buffer/buffer_pool.h"
 #include "buffer/extend_frame.h"
+#include "buffer/maker.h"
 #include "file.h"
 #include "fmt/format.h"
 #include "io/TableSpaceDiskManager.h"
@@ -30,20 +31,6 @@ auto cmp = [](string_view v1, string_view v2) -> int {
   return v1 < v2 ? 1 : -1;
 };
 
-template <>
-struct FrameConstructor<Page> {
-  template <typename... Args>
-  static Page* Construct(Frame* frame, Args... args) {
-    Page* page = new Page{args..., frame->buffer};
-    return page;
-  }
-};
-
-template <>
-struct FrameDeconstructor<Page> {
-  static void Deconstruct(Page* data) { return; }
-};
-
 struct PageMarker {
   static LocalAutoReleaseFrameData<Page> NewLocalBPlusTreePage(
       IBufferPool* pool, PageType page_type, PagePosition position) {
@@ -58,17 +45,17 @@ struct PageMarker {
 
 int main() {
   IBufferPool* pool = new LRUBufferPool(10);
-  auto data =
-      PageMarker::NewLocalBPlusTreePage(pool, kLeafPage, {"data.index", 0});
+  {
+    PagePosition p = {"index.data", 0};
+    auto page =
+        BufferedObjectMakerManager::Instance()->Select(pool)->NewObject<Page>(
+            p, PageType::kLeafPage, true);
 
-  data->Insert("key0001", {"val0001"}, cmp);
-  data->Insert("key0002", {"val0002"}, cmp);
-  data->Insert("key0003", {"val0003"}, cmp);
-  data->Insert("key0004", {"val0004"}, cmp);
-
-  data->scan_use();
-
-  spdlog::info("scan_use");
+    page->Insert("key001", {"val001"}, cmp);
+    page->Insert("key002", {"val001"}, cmp);
+    page->Insert("key003", {"val001"}, cmp);
+    page->Insert("key005", {"val001"}, cmp);
+  }
 
   delete pool;
 }

@@ -1,5 +1,7 @@
 #include "buffer/buffer_pool.h"
 
+#include <spdlog/spdlog.h>
+
 #include <iostream>
 
 #include "buffer/replacer.h"
@@ -30,6 +32,7 @@ LRUBufferPool::~LRUBufferPool() {
 }
 
 Frame* LRUBufferPool::FetchPage(PagePosition page_position) {
+  spdlog::info("{}:position={}", __func__, page_position);
   lock_guard<mutex> guard(pool_lock_);
   if (frame_ids_.count(page_position)) {
     auto frame_id = frame_ids_[page_position];
@@ -41,6 +44,7 @@ Frame* LRUBufferPool::FetchPage(PagePosition page_position) {
 
   auto result = this->GetFreeFrame();
   if (!result.has_value()) {
+    spdlog::info("{}:position={}, no free frame.", __func__, page_position);
     return nullptr;
   }
 
@@ -48,6 +52,8 @@ Frame* LRUBufferPool::FetchPage(PagePosition page_position) {
   auto frame = frames_[frame_id];
 
   if (frame->is_dirty) {
+    spdlog::info("{}:flush old page, position={}", __func__, page_position,
+                 frame->page_position);
     space_manager_->write(frame->page_position.space,
                           frame->page_position.page_address, frame->buffer,
                           PAGE_SIZE);
@@ -68,10 +74,11 @@ Frame* LRUBufferPool::FetchPage(PagePosition page_position) {
 
 void LRUBufferPool::UnPinPage(PagePosition page_position) {
   lock_guard<mutex> guard(pool_lock_);
-
   if (frame_ids_.count(page_position) == 0) {
+    spdlog::info("{}: position={}, not exist.", __func__, page_position);
     return;
   }
+  spdlog::info("{}: position={}", __func__, page_position);
   auto frame = frames_[frame_ids_[page_position]];
   frame->pin_count--;
   if (frame->pin_count <= 0) {
@@ -81,11 +88,11 @@ void LRUBufferPool::UnPinPage(PagePosition page_position) {
 
 bool LRUBufferPool::FlushPage(PagePosition page_position) {
   lock_guard<mutex> guard(pool_lock_);
-
   if (frame_ids_.count(page_position) == 0) {
-    cout << "false" << endl;
+    spdlog::info("{}: position={}, not exist.", __func__, page_position);
     return false;
   }
+  spdlog::info("{}: position={}", __func__, page_position);
   auto frame_id = frame_ids_[page_position];
   auto frame = frames_[frame_id];
 

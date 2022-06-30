@@ -19,6 +19,7 @@ using std::optional;
 using std::unordered_map;
 using std::vector;
 
+class IReplacer;
 class ISpaceManager;
 
 class IBufferPool {
@@ -27,10 +28,8 @@ class IBufferPool {
   virtual void UnPinPage(PagePosition page_position) = 0;
   virtual bool FlushPage(PagePosition page_position) = 0;
   virtual void FlushAllPage() = 0;
+  virtual ~IBufferPool() = default;
 };
-
-class IReplacer;
-class ISpaceManager;
 
 class LRUBufferPool : public IBufferPool {
  public:
