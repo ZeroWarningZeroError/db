@@ -69,6 +69,7 @@ Page::Page(PageType page_type, bool isLoad, char *buffer) {
   meta_->use = sizeof(PageMeta);
   meta_->page_type = page_type;
   meta_->parent_key_offset = 0;
+  meta_->node_size = 0;
 
   RecordMeta min_record_meta = {.next = virtual_max_record_address_,
                                 .owned = 1,
@@ -155,7 +156,10 @@ ResultCode Page::Insert(string_view key, const vector<string_view> &vals,
                        compare);
     record_meta = this->get_arribute<RecordMeta>(record_address);
 
-    auto slot_record_meta = this->get_arribute<RecordMeta>(this->slot(slot_no));
+    // auto slot_record_meta =
+    // this->get_arribute<RecordMeta>(this->SlotValue(slot_no));
+    auto slot_record_meta =
+        this->Attribute<RecordMeta>(this->SlotValue(slot_no));
 
     slot_record_meta->owned += 1;
     if (slot_record_meta->owned >= 8) {
@@ -289,7 +293,7 @@ ResultCode Page::AppendPage(Page &page, const Compare &compare) {
  */
 ResultCode Page::Erase(string_view key, const Compare &compare) {
   int hit_slot = this->LocateSlot(key, compare);
-  uint16_t pre_address = this->slot(hit_slot - 1);
+  uint16_t pre_address = this->SlotValue(hit_slot - 1);
   auto prev = this->get_arribute<RecordMeta>(pre_address);
   RecordMeta *cur = nullptr;
   string_view data;
@@ -315,7 +319,7 @@ ResultCode Page::Erase(string_view key, const Compare &compare) {
   uint16_t need_delete_record = prev->next;
   // 删除数据移出数据链表
   prev->next = next_use_record;
-  auto own_header = this->get_arribute<RecordMeta>(this->slot(hit_slot));
+  auto own_header = this->get_arribute<RecordMeta>(this->SlotValue(hit_slot));
 
   // 调整目录
   if (cur->owned && prev->owned) {
@@ -327,7 +331,7 @@ ResultCode Page::Erase(string_view key, const Compare &compare) {
     if (cur->owned) {
       own_header = prev;
       own_header->owned = cur->owned;
-      set_slot(hit_slot, reinterpret_cast<char *>(prev) - base_address_);
+      this->set_slot(hit_slot, reinterpret_cast<char *>(prev) - base_address_);
     }
     own_header->owned--;
   }
@@ -351,14 +355,15 @@ ResultCode Page::Erase(string_view key, const Compare &compare) {
  * @param compare 比较函数
  * @return optional<string_view>
  */
-optional<string> Page::Search(string_view key, const Compare &compare) {
+optional<string> Page::Search(string_view key,
+                              const Compare &compare) const noexcept {
   uint16_t hit_slot = this->LocateSlot(key, compare);
-  uint16_t pre_address = this->slot(hit_slot - 1);
-  auto prev = this->get_arribute<RecordMeta>(pre_address);
-  RecordMeta *cur = nullptr;
+  uint16_t pre_address = this->SlotValue(hit_slot - 1);
+  auto prev = this->UnmodifiedAttribute<RecordMeta>(pre_address);
+  // RecordMeta *cur = nullptr;
   string_view data;
   while (prev) {
-    cur = get_arribute<RecordMeta>(prev->next);
+    auto cur = this->UnmodifiedAttribute<RecordMeta>(prev->next);
     data = {base_address_ + prev->next + sizeof(RecordMeta),
             static_cast<size_t>(cur->key_len)};
     if (compare(key, data) == 0) {
@@ -406,15 +411,15 @@ pair<string, Page> Page::SplitPage() {
   uint16_t new_page_begin_record_address = prev_record_meta->next;
 
   uint16_t end_address =
-      meta_->page_type == kInternalPage ? 0 : this->slot(meta_->slots - 1);
+      meta_->page_type == kInternalPage ? 0 : this->SlotValue(meta_->slots - 1);
 
   // 拷贝出新页
   Page page = this->CopyRecordToNewPage(record_address, end_address);
 
   // 对原始页面进行修改
   uint16_t rest_slots = prev_record_meta->slot_no + 1;
-  auto cur_record_meta =
-      this->get_arribute<RecordMeta>(this->slot(prev_record_meta->slot_no - 1));
+  auto cur_record_meta = this->get_arribute<RecordMeta>(
+      this->SlotValue(prev_record_meta->slot_no - 1));
 
   int owned = 0;
 
@@ -424,9 +429,9 @@ pair<string, Page> Page::SplitPage() {
     cur_record_meta = this->get_arribute<RecordMeta>(cur_record_meta->next);
   }
 
-  prev_record_meta->next = this->slot(meta_->slots - 1);
+  prev_record_meta->next = this->SlotValue(meta_->slots - 1);
 
-  this->get_arribute<RecordMeta>(this->slot(meta_->slots - 1))->owned =
+  this->get_arribute<RecordMeta>(this->SlotValue(meta_->slots - 1))->owned =
       owned + 1;
 
   size_t slot_size = sizeof(uint16_t) * (rest_slots - 1);
@@ -438,7 +443,8 @@ pair<string, Page> Page::SplitPage() {
   memcpy(base_address_ + this->slot_offset(0), page_slots, slot_size);
 
   if (meta_->page_type == kInternalPage) {
-    this->Fill(this->slot(meta_->slots - 1) + sizeof(RecordMeta) + 3, mid_val);
+    this->Fill(this->SlotValue(meta_->slots - 1) + sizeof(RecordMeta) + 3,
+               mid_val);
   }
   // Page page = this->CopyRecordToNewPage(, new_page_begin_record_address);
   this->TidyPage();
@@ -486,12 +492,13 @@ bool Page::full() const { return true; }
  * @param compare   对比函数
  * @return uint16_t 返回数据对应槽所有指向的地址
  */
-uint16_t Page::LocateSlot(string_view key, const Compare &compare) noexcept {
+uint16_t Page::LocateSlot(string_view key,
+                          const Compare &compare) const noexcept {
   int lo = 0, hi = meta_->slots;
   while (lo < hi) {
     int mid = (lo + hi) >> 1;
-    uint16_t slotAddress = this->slot(mid);
-    auto header = this->get_arribute<RecordMeta>(this->slot(mid));
+    uint16_t slotAddress = this->SlotValue(mid);
+    auto header = this->UnmodifiedAttribute<RecordMeta>(this->SlotValue(mid));
 
     string_view data = {base_address_ + slotAddress + sizeof(RecordMeta),
                         static_cast<size_t>(header->key_len)};
@@ -521,18 +528,22 @@ uint16_t Page::LocateSlot(string_view key, const Compare &compare) noexcept {
  * @param slot_no 槽索引编号
  */
 void Page::SplitSlot(int slot_no) noexcept {
-  auto meta = this->get_arribute<RecordMeta>(this->slot(slot_no));
+  auto meta = this->get_arribute<RecordMeta>(this->SlotValue(slot_no));
   if (meta->owned <= 1) {
     return;
   }
   // 拆分目录页
   int half = meta->owned / 2;
   meta->owned = meta->owned - half;
+  // uint16_t new_slot_address =
+  //     *get_arribute<uint16_t>(this->slot(slot_no, half - 2));
+
   uint16_t new_slot_address =
-      *get_arribute<uint16_t>(this->slot(slot_no, half - 2));
+      *Attribute<uint16_t>(this->LocateRecord(slot_no, half - 2));
+
   auto new_own_header = get_arribute<RecordMeta>(new_slot_address);
   new_own_header->owned = half;
-  insert_slot(slot_no, new_slot_address);
+  this->InsertSlot(slot_no, new_slot_address);
 }
 
 /**
@@ -577,8 +588,6 @@ uint16_t Page::alloc(uint16_t size) noexcept {
   if (this->slot_offset(0) - meta_->heap_top >= size + 4) {
     free_address = meta_->heap_top;
     meta_->heap_top += size;
-    // cout << free_address << " " << meta_->heap_top << " " <<
-    // this->slot_offset(0) << endl;
     return free_address;
   }
 
@@ -627,19 +636,11 @@ char *Page::base_address() const noexcept { return base_address_; }
  * @param slot_no 槽索引编号
  * @return uint16_t
  */
-uint16_t Page::SlotValue(int slot_no) noexcept {
+uint16_t Page::SlotValue(int slot_no) const noexcept {
   return *reinterpret_cast<uint16_t *>(base_address_ + meta_->size -
                                        (meta_->slots - slot_no) *
                                            sizeof(uint16_t));
 }
-
-/**
- * @brief 插入槽
- *
- * @param slot_no 槽索引编号
- * @param value 值
- */
-void Page::InsertSlot(int slot_no, uint16_t value) noexcept {}
 
 /**
  * @brief 删除槽
@@ -656,19 +657,6 @@ uint16_t Page::EraseSlot(int slot_no) noexcept {
   meta_->slots--;
   meta_->free_size = meta_->free_size + sizeof(uint16_t);
   return 0;
-}
-
-/**
- * @brief 返回对应目录槽记录的地址
- *
- * @param pos 目录槽序号
- * @return uint16_t 目录槽记录的地址
- */
-uint16_t Page::slot(int pos) const noexcept {
-  assert(pos >= 0 && pos < meta_->slots);
-  return *reinterpret_cast<uint16_t *>(base_address_ + meta_->size -
-                                       meta_->slots * sizeof(uint16_t) +
-                                       pos * sizeof(uint16_t));
 }
 
 /**
@@ -690,7 +678,7 @@ uint16_t Page::slot_offset(int pos) const noexcept {
  * @return uint16_t 记录地址
  */
 uint16_t Page::slot(int slot_no, int record_no) {
-  auto prev = get_arribute<RecordMeta>(this->slot(slot_no - 1));
+  auto prev = get_arribute<RecordMeta>(this->SlotValue(slot_no - 1));
   int no = 0;
   while (prev) {
     auto cur = get_arribute<RecordMeta>(prev->next);
@@ -710,7 +698,7 @@ uint16_t Page::slot(int slot_no, int record_no) {
  * @param address 记录地址
  * @return uint16_t
  */
-uint16_t Page::insert_slot(int slot_no, uint16_t address) noexcept {
+void Page::InsertSlot(int slot_no, uint16_t address) noexcept {
   // cout << "insert_slot:" << slot_no << " " << address << endl;
   uint16_t src = this->slot_offset(0);
   uint16_t dst = src - sizeof(uint16_t);
@@ -719,25 +707,6 @@ uint16_t Page::insert_slot(int slot_no, uint16_t address) noexcept {
          sizeof(uint16_t));
   meta_->slots++;
   meta_->free_size = meta_->free_size - sizeof(uint16_t);
-  return 0;
-}
-
-/**
- * @brief 删除目录槽
- *
- * @param slot_no 目录槽编号
- * @return uint16_t
- */
-uint16_t Page::erase_slot(int slot_no) noexcept {
-  // meta_->size += sizeof(uint16_t);
-  cout << "erase_slot" << slot_no << endl;
-  uint16_t base_slot = this->slot_offset(0);
-  uint16_t src = base_slot;
-  uint16_t dst = base_slot + sizeof(uint16_t) * slot_no;
-  memcpy(base_address_ + dst, base_address_ + src, sizeof(uint16_t) * slot_no);
-  meta_->slots--;
-  meta_->free_size = meta_->free_size + sizeof(uint16_t);
-  return 0;
 }
 
 /**
@@ -875,7 +844,7 @@ Page Page::CopyRecordToNewPage(uint16_t begin_record_address,
     page.meta_->node_size++;
   }
 
-  auto max_record_meta = page.get_arribute<RecordMeta>(page.slot(1));
+  auto max_record_meta = page.get_arribute<RecordMeta>(page.SlotValue(1));
   max_record_meta->owned = owned + 1;
   page_slots[new_page_slot_no] = end_record_address;
   if (modified_max_record) {
@@ -906,7 +875,7 @@ Page Page::CopyRecordToNewPage(uint16_t begin_record_address,
  */
 uint16_t Page::LowerBound(string_view key, const Compare &compare) noexcept {
   int hit_slot = this->LocateSlot(key, compare);
-  uint16_t pre_address = this->slot(hit_slot - 1);
+  uint16_t pre_address = this->SlotValue(hit_slot - 1);
   auto prev = this->get_arribute<RecordMeta>(pre_address);
   RecordMeta *cur = nullptr;
   // 查询插入位置
@@ -935,7 +904,7 @@ uint16_t Page::LowerBound(string_view key, const Compare &compare) noexcept {
  */
 uint16_t Page::FloorSearch(string_view key, const Compare &compare) noexcept {
   int hit_slot = this->LocateSlot(key, compare);
-  uint16_t pre_address = this->slot(hit_slot - 1);
+  uint16_t pre_address = this->SlotValue(hit_slot - 1);
   uint16_t prev_slot = hit_slot - 1;
   auto prev = this->get_arribute<RecordMeta>(pre_address);
   RecordMeta *cur = nullptr;
@@ -976,10 +945,11 @@ uint16_t Page::LocateRecord(uint16_t record_no) noexcept {
   uint16_t slot_no = 1;
 
   RecordMeta *record_meta = nullptr;
-  RecordMeta *prev_record_meta = this->get_arribute<RecordMeta>(this->slot(0));
+  RecordMeta *prev_record_meta =
+      this->get_arribute<RecordMeta>(this->SlotValue(0));
 
   while (slot_no < meta_->slots) {
-    uint16_t slot_record_address = this->slot(slot_no);
+    uint16_t slot_record_address = this->SlotValue(slot_no);
     record_meta = this->get_arribute<RecordMeta>(slot_record_address);
     if (num + record_meta->owned > record_no) {
       record_meta = prev_record_meta;
@@ -998,7 +968,7 @@ uint16_t Page::LocateRecord(uint16_t record_no) noexcept {
     record_meta = this->get_arribute<RecordMeta>(record_meta->next);
   }
 
-  record_address == this->slot(meta_->slots - 1) ? 0 : record_address;
+  record_address == this->SlotValue(meta_->slots - 1) ? 0 : record_address;
 
   if (record_address) {
     record_meta = this->get_arribute<RecordMeta>(record_address);
@@ -1170,12 +1140,12 @@ void Page::scan_free() noexcept {
 void Page::scan_slots() noexcept {
   cout << "slots=[" << endl;
   for (int i = 0; i < meta_->slots; i++) {
-    auto header = get_arribute<RecordMeta>(this->slot(i));
-    string_view key = {base_address_ + this->slot(i) + sizeof(RecordMeta),
+    auto header = get_arribute<RecordMeta>(this->SlotValue(i));
+    string_view key = {base_address_ + this->SlotValue(i) + sizeof(RecordMeta),
                        static_cast<size_t>(header->key_len)};
     cout << " [i=" << i << ",offset=" << this->slot_offset(i)
-         << ",header=" << this->slot(i) << "," << header << ", " << key << "]"
-         << endl;
+         << ",header=" << this->SlotValue(i) << "," << header << ", " << key
+         << "]" << endl;
   }
   cout << "]" << endl;
 }

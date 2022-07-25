@@ -8,7 +8,7 @@
 #define PAGE_SIZE (16 * 1024)
 
 #include "base.h"
-#include "bplustree/page.h"
+#include "bplustree/bplustree_page.h"
 #include "memory/buffer.h"
 
 using std::cout;

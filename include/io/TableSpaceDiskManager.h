@@ -13,7 +13,7 @@ class File;
 using std::unordered_map;
 
 #define STATIC_SINGLE_INSTANCE(type) \
-  static type* instance() {          \
+  static type* Instance() {          \
     static type obj;                 \
     return &obj;                     \
   }

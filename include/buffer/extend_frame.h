@@ -1,10 +1,14 @@
 #pragma once
 #include <spdlog/spdlog.h>
 
+#include <utility>
+
 #include "buffer/buffer_pool.h"
 #include "buffer/construct.h"
 #include "buffer/frame.h"
 #include "memory/ref.h"
+
+using std::move;
 
 template <typename T>
 class LocalAutoReleaseFrameData {
@@ -34,6 +38,12 @@ class LocalAutoReleaseFrameData {
 template <typename T>
 class SharedFrameData : public Reference {
  public:
+  SharedFrameData() {
+    pool_ = nullptr;
+    frame_ = nullptr;
+    data_ = nullptr;
+  };
+
   template <typename... Args>
   SharedFrameData(IBufferPool *pool, PagePosition position, Args &&... args) {
     pool_ = pool;
@@ -54,7 +64,7 @@ class SharedFrameData : public Reference {
     return this->Copy(other);
   }
 
-  SharedFrameData<T> &operator=(const SharedFrameData<T> &&other) {
+  SharedFrameData<T> &operator=(SharedFrameData<T> &&other) {
     this->DecrementReference();
     if (this->reference_count() == 0) {
       this->Deconstruct();
@@ -63,10 +73,10 @@ class SharedFrameData : public Reference {
   }
 
   void Deconstruct() {
-    spdlog::info("flush:space={},address={}", position_.space,
-                 position_.page_address);
-    pool_->UnPinPage(position_);
-    FrameDeconstructor<T>::Deconstruct(data_);
+    if (pool_ != nullptr) {
+      pool_->UnPinPage(position_);
+      FrameDeconstructor<T>::Deconstruct(data_);
+    }
   }
 
   ~SharedFrameData() {
@@ -77,28 +87,27 @@ class SharedFrameData : public Reference {
   }
 
  public:
-  T *operator->() {
-    frame_->is_dirty = true;
-    return data_;
-  }
   const T *operator->() const { return data_; }
+  // T *operator->() const { return data_; }
   Frame *frame() { return frame_; }
   T *data() { return data_; }
 
  private:
-  SharedFrameData<T> Copy(const SharedFrameData<T> &other) {
+  SharedFrameData<T> &Copy(const SharedFrameData<T> &other) {
     this->IncrementReference();
     this->reference_count_ = other.reference_count_;
     this->pool_ = other.pool_;
     this->position_ = other.position_;
     this->data_ = other.data_;
+    return *this;
   }
 
-  SharedFrameData<T> Move(const SharedFrameData<T> &&other) {
+  SharedFrameData<T> &Move(SharedFrameData<T> &&other) {
     this->reference_count_ = move(other.reference_count_);
     this->pool_ = move(other.pool_);
     this->position_ = move(other.position_);
     this->data_ = move(other.data_);
+    return *this;
   }
 
  private:

@@ -31,5 +31,5 @@ using frame_id_t = int64_t;
 using space_t = string;
 
 #ifndef PAGE_SIZE
-#define PAGE_SIZE (16 * 20)
+#define PAGE_SIZE (16 * 1024)
 #endif

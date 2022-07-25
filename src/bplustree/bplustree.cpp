@@ -1,10 +1,17 @@
-#include "bplustree.h"
+#include "bplustree/bplustree.h"
+
+#include <fmt/ostream.h>
+#include <spdlog/spdlog.h>
 
 #include <cassert>
 #include <iostream>
 #include <queue>
 
 #include "bplustree/bplustree_page.h"
+#include "buffer/buffer_pool.h"
+#include "buffer/maker.h"
+#include "io/SpaceManager.h"
+#include "io/TableSpaceDiskManager.h"
 #include "serialize.h"
 
 using std::cout;
@@ -12,33 +19,39 @@ using std::endl;
 using std::queue;
 
 ostream &operator<<(ostream &os, const BPlusTreeIndexMeta &meta) {
-  os << fmt::format("[root={},leaf={},free={},crc={}]", meta.root, meta.leaf,
-                    meta.free, meta.crc);
-  return os;
+  return os << "{"
+            << fmt::format("root={}, leaf={}, free={}, crc={}", meta.root,
+                           meta.leaf, meta.free, meta.crc)
+            << "}";
 }
 
 BPlusTreeIndex::BPlusTreeIndex(const string &index_file_path,
-                               const Compare &compare)
-    : comparator_(compare) {
+                               const Compare &compare, IBufferPool *pool)
+    : index_file_path_(index_file_path), comparator_(compare), pool_(pool) {
+  maker_ = BufferedObjectMakerManager::Instance()->Select(pool_);
+  space_manager_ = TableSpaceDiskManager::Instance();
+
   // 打开索引文件
   bool is_init = File::exist(index_file_path);
-  file_ = new File(index_file_path);
-  assert(file_->is_open());
 
   // 加载索引的元数据
   index_meta_ = new BPlusTreeIndexMeta{0, 0, 0, 0, 0};
   if (is_init) {
-    file_->read(0, index_meta_, sizeof(BPlusTreeIndexMeta));
+    space_manager_->read(index_file_path_, 0,
+                         reinterpret_cast<char *>(index_meta_),
+                         sizeof(index_meta_));
   }
-  cout << (*index_meta_) << endl;
+  spdlog::info("{}: index_meta={}", __func__, *index_meta_);
 }
 
 BPlusTreeIndex::~BPlusTreeIndex() {
   if (index_meta_ != nullptr) {
-    cout << (*index_meta_) << endl;
-    file_->write(0, index_meta_, sizeof(BPlusTreeIndexMeta));
+    spdlog::info("{}: index_meta={}", __func__, *index_meta_);
+
+    space_manager_->write(index_file_path_, 0,
+                          reinterpret_cast<char *>(index_meta_),
+                          sizeof(BPlusTreeIndexMeta));
     delete index_meta_;
-    delete file_;
   }
 }
 
@@ -91,20 +104,23 @@ address_t BPlusTreeIndex::LocateLeafNode(string_view key) {
     return 0;
   }
 
-  Page page(PageType::kLeafPage);
-  file_->read(index_meta_->root, page.base_address(), PAGE_SIZE);
+  // Page page(PageType::kLeafPage);
+  // file_->read(index_meta_->root, page.base_address(), PAGE_SIZE);
+
+  auto page =
+      maker_->NewObject<Page>(PagePosition{index_file_path_, index_meta_->root},
+                              PageType::kLeafPage, true);
 
   address_t target_node_address = index_meta_->root;
-  while (page.meta()->page_type == PageType::kInternalPage) {
-    // cout << target_node_address << endl;
-    uint16_t offset = page.LowerBound(key, comparator_);
-    auto meta = page.get_arribute<RecordMeta>(offset);
-    // auto key = {page.base_address() + sizeof(RecordMeta), meta->key_len};
-    target_node_address = *(page.get_arribute<address_t>(
-        offset + sizeof(RecordMeta) + meta->key_len));
-    // cout <<
-    file_->read(target_node_address, page.base_address(), PAGE_SIZE);
-  }
+  // while (page->meta()->page_type == PageType::kInternalPage) {
+  //   uint16_t offset = page->LowerBound(key, comparator_);
+  //   auto meta = page->UnmodifiedAttribute<RecordMeta>(offset);
+  //   target_node_address = *(page->get_arribute<address_t>(
+  //       offset + sizeof(RecordMeta) + meta->key_len));
+  //   page = maker_->NewObject<Page>(
+  //       PagePosition{index_file_path_, target_node_address},
+  //       PageType::kLeafPage, true);
+  // }
 
   return target_node_address;
 }

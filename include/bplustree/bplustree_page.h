@@ -131,7 +131,8 @@ class Page {
    * @param compare 比较函数
    * @return optional<string>
    */
-  optional<string> Search(string_view key, const Compare &compare);
+  optional<string> Search(string_view key,
+                          const Compare &compare) const noexcept;
 
   /**
    * @brief 分裂页
@@ -162,11 +163,8 @@ class Page {
 
  public:
   uint16_t alloc(uint16_t size) noexcept;
-  uint16_t slot(int pos) const noexcept;
   uint16_t slot_offset(int pos) const noexcept;
   uint16_t slot(int slot_no, int record_no);
-  uint16_t insert_slot(int slot_no, uint16_t address) noexcept;
-  uint16_t erase_slot(int slot_no) noexcept;
   void set_slot(int slot_no, uint16_t address) noexcept;
 
   /**
@@ -175,7 +173,7 @@ class Page {
    * @param slot_no 槽索引编号
    * @return uint16_t
    */
-  uint16_t SlotValue(int slot_no) noexcept;
+  uint16_t SlotValue(int slot_no) const noexcept;
 
   /**
    * @brief 插入槽
@@ -200,7 +198,8 @@ class Page {
    * @param compare 比较函数
    * @return uint16_t 对应的槽
    */
-  uint16_t LocateSlot(string_view target_key, const Compare &compare) noexcept;
+  uint16_t LocateSlot(string_view target_key,
+                      const Compare &compare) const noexcept;
 
   /**
    * @brief 分裂对应槽, 平分槽内记录
@@ -333,6 +332,12 @@ class Page {
   template <typename T>
   T *get_arribute(uint16_t offset);
 
+  template <typename T>
+  T *Attribute(uint16_t offset);
+
+  template <typename T>
+  const T *UnmodifiedAttribute(uint16_t offset) const;
+
   string_view Key(uint16_t record_address);
   string_view Value(uint16_t record_address);
 
@@ -345,7 +350,6 @@ class Page {
   PageMeta *meta_;
   char *base_address_;
 
-  shared_ptr<char> page_data_;
   shared_ptr<char> page_data_guard_;
 
   uint16_t virtual_min_record_address_;
@@ -358,6 +362,22 @@ class Page {
 
 template <typename T>
 T *Page::get_arribute(uint16_t offset) {
+  if (offset == 0) {
+    return nullptr;
+  }
+  return reinterpret_cast<T *>(base_address_ + offset);
+}
+
+template <typename T>
+T *Page::Attribute(uint16_t offset) {
+  if (offset == 0) {
+    return nullptr;
+  }
+  return reinterpret_cast<T *>(base_address_ + offset);
+}
+
+template <typename T>
+const T *Page::UnmodifiedAttribute(uint16_t offset) const {
   if (offset == 0) {
     return nullptr;
   }

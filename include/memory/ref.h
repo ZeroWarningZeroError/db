@@ -42,7 +42,7 @@ class Reference {
     return *reference_count_;
   }
 
- private:
+ protected:
   size_t *reference_count_;
   mutex reference_mutex_;
 };

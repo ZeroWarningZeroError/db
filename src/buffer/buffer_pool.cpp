@@ -14,7 +14,7 @@ using std::lock_guard;
 
 LRUBufferPool::LRUBufferPool(size_t capacity) : capacity_(capacity) {
   replacer = new LRUReplacer(capacity_);
-  space_manager_ = TableSpaceDiskManager::instance();
+  space_manager_ = TableSpaceDiskManager::Instance();
 
   for (frame_id_t frame_id = 0; frame_id < capacity_; frame_id++) {
     frees_.emplace_back(frame_id);

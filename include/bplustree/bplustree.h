@@ -16,6 +16,9 @@ using std::ostream;
 using std::string_view;
 
 class File;
+class BufferedObjectMaker;
+class IBufferPool;
+class ISpaceManager;
 
 struct BPlusTreeIndexMeta {
   address_t root;
@@ -29,7 +32,8 @@ ostream &operator<<(ostream &os, const BPlusTreeIndexMeta &meta);
 
 class BPlusTreeIndex {
  public:
-  BPlusTreeIndex(const string &index_file_path, const Compare &compare);
+  BPlusTreeIndex(const string &index_file_path, const Compare &compare,
+                 IBufferPool *pool);
   ~BPlusTreeIndex();
 
  public:
@@ -99,4 +103,8 @@ class BPlusTreeIndex {
   File *file_;
   BPlusTreeIndexMeta *index_meta_;
   Compare comparator_;
+  string index_file_path_;
+  BufferedObjectMaker *maker_;
+  ISpaceManager *space_manager_;
+  IBufferPool *pool_;
 };
